@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>install.wim Larger Than 4 GB on FAT32? Fix It on Mac</title>
+<meta name="description" content="Why Windows ISOs fail on FAT32 USB drives, why exFAT isn't a fix, and how splitting install.wim into .swm parts solves it on a Mac.">
+<link rel="canonical" href="https://festomanolo.com/ndaga-fijo/guides/install-wim-larger-than-4gb-fat32-mac/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article"><meta property="og:title" content="install.wim larger than 4 GB on FAT32: the fix">
+<meta property="og:description" content="Split install.wim into .swm parts so a Windows installer fits on a FAT32 USB drive.">
+<meta property="og:url" content="https://festomanolo.com/ndaga-fijo/guides/install-wim-larger-than-4gb-fat32-mac/">
+<meta property="og:image" content="https://festomanolo.com/ndaga-fijo/assets/img/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"TechArticle","headline":"install.wim larger than 4 GB on FAT32: the fix on Mac","author":{"@type":"Person","name":"festomanolo"},"about":"FAT32 4 GB file size limit and Windows install.wim","mainEntityOfPage":"https://festomanolo.com/ndaga-fijo/guides/install-wim-larger-than-4gb-fat32-mac/"},
+{"@type":"BreadcrumbList","itemListElement":[
+ {"@type":"ListItem","position":1,"name":"Ndaga Fijo","item":"https://festomanolo.com/ndaga-fijo/"},
+ {"@type":"ListItem","position":2,"name":"install.wim over 4 GB","item":"https://festomanolo.com/ndaga-fijo/guides/install-wim-larger-than-4gb-fat32-mac/"}]}]}
+</script>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="brand" href="../../"><img src="../../assets/img/icon-56.png" width="28" height="28" alt="">Ndaga Fijo</a>
+<nav><a href="../../#speed">Speed</a><a href="../../#faq">FAQ</a><a class="btn small primary" href="https://github.com/festomanolo/ndaga-fijo/releases/latest">Download</a></nav></div></header>
+<main class="article">
+<p class="crumbs"><a href="../../">Ndaga Fijo</a> › Guides › install.wim over 4 GB</p>
+<h1>install.wim larger than 4 GB on FAT32: why it fails and how to fix it</h1>
+<p>You copy a Windows ISO's files to a FAT32 USB drive and Finder or the terminal stops with a file-too-large error, usually on <code class="i">sources/install.wim</code>. This is a hard limit of the filesystem, not a bad drive or a bad download.</p>
+
+<h2>Why it happens</h2>
+<p>FAT32 stores file sizes in 32 bits, so no single file can exceed 4 GiB minus one byte (4,294,967,295 bytes). Current Windows ISOs often carry an <code class="i">install.wim</code> bigger than that. The rest of the ISO fits easily; one file doesn't.</p>
+
+<h2>Why "just use exFAT" isn't the answer</h2>
+<p>exFAT has no 4 GB limit, but most PC firmware (UEFI) can only boot from FAT32 on the EFI system area. A drive that copies fine can still fail to boot, so you trade a visible error for a silent one.</p>
+
+<h2>The fix: split the image</h2>
+<p>A WIM image can be split into numbered parts that Windows Setup reads as one image. The parts are named <code class="i">install.swm</code>, <code class="i">install2.swm</code>, <code class="i">install3.swm</code>, and so on, each under the FAT32 limit. Nothing is recompressed, so the content and the Windows editions inside stay exactly as Microsoft shipped them.</p>
+<div class="callout"><strong>With Ndaga Fijo this is automatic.</strong> When it extracts a Windows ISO to a FAT32 drive and finds an oversized <code class="i">install.wim</code>, it splits it for you into parts of about 4,000 MiB, copying the compressed data byte for byte and rewriting only the headers and lookup tables. You'll see a "Splitting install.wim" line in the log.</div>
+
+<h2>Doing it by hand</h2>
+<p>On any OS, the open-source <strong>wimlib</strong> tool does the same job:</p>
+<pre>wimlib-imagex split install.wim install.swm 4000</pre>
+<p>Copy the resulting <code class="i">.swm</code> files into <code class="i">sources/</code> on the FAT32 drive and don't copy the original <code class="i">install.wim</code>.</p>
+
+<h2>Things to know</h2>
+<ul><li>This only applies to FAT32. If you choose exFAT in Ndaga Fijo, files are copied unsplit, and many PCs won't boot the result.</li>
+<li>Images using the compressed "ESD" layout (<code class="i">install.esd</code>) can't be split this way, and are normally already under 4 GB.</li>
+<li>Windows Setup finds the parts by name, so keep them together in <code class="i">sources/</code>.</li></ul>
+<p><a class="btn primary" href="https://github.com/festomanolo/ndaga-fijo/releases/latest">Download Ndaga Fijo</a> <a class="btn" href="../create-windows-usb-on-mac/">Full Windows USB guide</a></p>
+</main>
+<footer><div class="wrap"><p>Ndaga Fijo is free software (GPL v3 or later), based on <a href="https://rufus.ie">Rufus</a>. wimlib is a separate open-source project. Not affiliated with Microsoft.</p></div></footer>
+</body></html>
