@@ -87,11 +87,6 @@ enum Helper {
 
     static func ddWrite(image: String, drive: Drive, size: UInt64, verify: Bool, rep: Reporter) throws {
         try unmount(drive, rep)
-        let bs = 4 << 20
-        var raw: UnsafeMutableRawPointer?
-        guard posix_memalign(&raw, 4096, bs) == 0, let buf = raw else { throw HelperError(message: "Out of memory") }
-        defer { free(buf) }
-
         let src = open(image, O_RDONLY)
         guard src >= 0 else { throw errnoMessage("Cannot open image") }
         defer { close(src) }
