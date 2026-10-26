@@ -409,7 +409,7 @@ struct ContentView: View {
 
     private var doneStage: some View {
         resultStage(symbol: "checkmark", tint: .green, title: "Your drive is ready",
-                    detail: vm.selectedDriveTitle) {
+                    detail: "Finished in \(ViewModel.clock(vm.elapsed)) · \(vm.selectedDriveTitle)") {
             Button("Eject") { vm.eject() }.glassButton(prominent: true).controlSize(.large)
             Button("Done") { vm.reset() }.glassButton().controlSize(.large)
         }
