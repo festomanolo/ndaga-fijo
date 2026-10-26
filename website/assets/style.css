@@ -17,6 +17,7 @@ html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);
   font:400 17px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
+h1,h2{text-wrap:balance}
 h1,h2,h3{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",system-ui,sans-serif;margin:0;line-height:1.08}
 h1{font-size:clamp(2.4rem,6vw,4.4rem);font-weight:700;letter-spacing:-.035em}
 h2{font-size:clamp(1.9rem,4vw,3rem);font-weight:700;letter-spacing:-.03em}
@@ -96,7 +97,7 @@ header.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(180%) blur(
   font:650 .9rem ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;transition:width 1.3s cubic-bezier(.2,.8,.2,1);white-space:nowrap;min-width:max-content}
 .fill.slow{background:linear-gradient(90deg,#5b6478,#8a93a8)}
 .fill.fast{background:var(--grad);box-shadow:0 0 24px rgba(31,181,176,.5)}
-.fill.ref{background:repeating-linear-gradient(135deg,rgba(255,255,255,.28) 0 8px,rgba(255,255,255,.14) 8px 16px)}
+.fill.ref{color:var(--ink);background:repeating-linear-gradient(135deg,rgba(255,255,255,.28) 0 8px,rgba(255,255,255,.14) 8px 16px)}
 .in .fill{width:var(--w)}
 .big{display:flex;gap:18px 40px;flex-wrap:wrap;align-items:baseline;margin-bottom:26px}
 .big b{font-size:clamp(3rem,8vw,5.6rem);letter-spacing:-.04em;line-height:1}
