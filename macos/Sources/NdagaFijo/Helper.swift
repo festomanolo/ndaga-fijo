@@ -203,12 +203,14 @@ enum Helper {
             try Staging.writeFAT32(scan: scanned, drive: drive, partition: part, label: vol, threads: threads, rep: rep)
             staged = true
         }
-        let chunk = 1 << 20
-        let buf = UnsafeMutableRawPointer.allocate(byteCount: chunk, alignment: 4096)
-        defer { buf.deallocate() }
-        func advance(_ n: Int, _ rel: String) {
-            copied += UInt64(n)
-            rep.progress(0.1 + 0.88 * Double(copied) / Double(max(total, 1)), "Copying \(rel)")
+        if !staged {
+            guard let dest = dataVolumeMountPoint(drive.id) else { throw HelperError(message: "Cannot find the new volume") }
+            rep.log("Copying to \(dest)")
+            try TreeCopy.copy(scanned, dest: dest, splitLargeWim: fs == "FAT32", threads: 1, rep: rep, progress: { done, name in
+                rep.progress(0.1 + 0.88 * Double(done) / Double(max(scanned.total, 1)), "Copying \(name)")
+            })
+            rep.progress(0.99, "Flushing...")
+            sync()
         }
         var hasBootmgr = false
         for case let u as URL in walk {
