@@ -282,7 +282,7 @@ enum Helper {
                 rep.log("Installed Windows BIOS boot code (MBR + FAT32 boot record)")
             } catch let e as BiosBoot.Failure {                // files are intact, so UEFI boot still works
                 rep.log("Warning: BIOS boot code was not installed (\(e.message)). UEFI boot is unaffected.")
-                _ = Shell.diskutil(["mountDisk", drive.id])
+                BiosBoot.remount(drive.id)
             }
         }
     }
