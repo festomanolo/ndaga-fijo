@@ -7,7 +7,7 @@ swift build -c release --arch arm64 --arch x86_64
 BIN=.build/apple/Products/Release/NdagaFijo
 APP=build/NdagaFijo.app
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/NdagaFijo "$APP/Contents/MacOS/NdagaFijo"
+cp "$BIN" "$APP/Contents/MacOS/NdagaFijo"
 cp assets/NdagaFijo.icns "$APP/Contents/Resources/NdagaFijo.icns"
 
 cat > "$APP/Contents/Info.plist" <<PL
