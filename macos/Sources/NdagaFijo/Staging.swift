@@ -64,6 +64,7 @@ enum Staging {
         close(pfd)
         guard got == headBytes, pwrite(sfd, head, headBytes, 0) == headBytes else { throw Failure(message: "Cannot clone the FAT layout") }
 
+        rep.log("Cloned FAT layout")
         // 2. Attach and copy in parallel.
         rep.progress(0.08, "Preparing files...")
         let att = Shell.plist("/usr/bin/hdiutil", ["attach", "-imagekey", "diskimage-class=CRawDiskImage",
