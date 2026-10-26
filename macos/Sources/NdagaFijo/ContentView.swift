@@ -391,6 +391,12 @@ struct ContentView: View {
                 Text(vm.status).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                 Text(vm.speed.isEmpty ? vm.selectedDriveTitle : "\(vm.speed) · \(vm.selectedDriveTitle)")
                     .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text("\(ViewModel.clock(vm.elapsed)) elapsed")
+                    if let left = vm.remaining { Text("·"); Text("about \(ViewModel.clock(left)) left") }
+                }
+                .font(.system(size: 13, weight: .medium).monospacedDigit()).foregroundStyle(.secondary)
+                .padding(.top, 2)
             }
             Text("Keep the drive connected until this finishes.").font(.system(size: 12)).foregroundStyle(.tertiary)
             Button("Cancel") { vm.cancel() }.glassButton().controlSize(.large)
@@ -403,7 +409,7 @@ struct ContentView: View {
 
     private var doneStage: some View {
         resultStage(symbol: "checkmark", tint: .green, title: "Your drive is ready",
-                    detail: vm.selectedDriveTitle) {
+                    detail: "Finished in \(ViewModel.clock(vm.elapsed)) · \(vm.selectedDriveTitle)") {
             Button("Eject") { vm.eject() }.glassButton(prominent: true).controlSize(.large)
             Button("Done") { vm.reset() }.glassButton().controlSize(.large)
         }

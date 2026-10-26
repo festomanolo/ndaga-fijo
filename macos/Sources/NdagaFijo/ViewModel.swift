@@ -28,6 +28,8 @@ final class ViewModel: ObservableObject {
     @Published var outcome: Outcome = .idle
     @Published var errorMessage = ""
     @Published var speed = ""
+    @Published var elapsed: TimeInterval = 0
+    private var startedAt: Date?
     enum Outcome { case idle, success, failure }
 
     private var progressFile = ""
@@ -94,6 +96,19 @@ final class ViewModel: ObservableObject {
         outcome = .idle; progress = 0; status = "READY"; speed = ""; errorMessage = ""
     }
 
+    /// "2:05" / "1:02:09"
+    static func clock(_ t: TimeInterval) -> String {
+        let s = Int(t.rounded())
+        return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s % 3600 / 60, s % 60)
+                         : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    /// Time left, extrapolated from the average pace so far. Nil until there's enough to go on.
+    var remaining: TimeInterval? {
+        guard writing, progress > 0.04, elapsed > 3 else { return nil }
+        return elapsed * (1 - progress) / progress
+    }
+
     func eject() {
         let disk = selectedDrive
         Task {
@@ -127,6 +142,7 @@ final class ViewModel: ObservableObject {
         if DiskService.allowDiskImages { cmd = "NDAGA_ALLOW_DISK_IMAGES=1 " + cmd }
         let script = "do shell script \"\(cmd.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\" with administrator privileges"
 
+        startedAt = Date(); elapsed = 0
         running = true; writing = true; outcome = .idle; errorMessage = ""; speed = ""; progress = 0; status = "Starting…"
         appendLog("Starting \(effectiveMode == .extract ? "ISO" : "DD") write to \(selectedDrive)")
         var finished = false, failed = false
@@ -154,6 +170,7 @@ final class ViewModel: ObservableObject {
         Task { @MainActor in
             while running {
                 drain(&offset, &finished, &failed)
+                if let t = startedAt { elapsed = Date().timeIntervalSince(t) }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
         }
@@ -181,6 +198,7 @@ final class ViewModel: ObservableObject {
     }
 
     private func finish(error: String?) {
+        if let t = startedAt { elapsed = Date().timeIntervalSince(t) }
         running = false; writing = false
         if let error {
             if !error.isEmpty { appendLog("ERROR: \(error)"); errorMessage = error }
