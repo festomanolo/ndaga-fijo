@@ -223,11 +223,86 @@ struct ContentView: View {
             }
             return true
         }
-        .alert("WARNING: ALL DATA ON DEVICE WILL BE DESTROYED", isPresented: $vm.showConfirm) {
-            Button("Cancel", role: .cancel) {}
-            Button("OK", role: .destructive) { vm.start() }
-        } message: {
-            Text("To continue with this operation, click OK. To quit, click Cancel.\n\n\(vm.selectedDriveTitle)")
+    }
+
+    // MARK: Options
+
+    private var optionsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            label("Options")
+            optionRow("Write mode") {
+                Picker("", selection: $vm.mode) {
+                    ForEach(WriteMode.allCases) { Text($0.title).tag($0) }
+                }.labelsHidden().disabled(vm.running)
+            }
+            if vm.effectiveMode == .extract {
+                optionRow("Partition scheme") {
+                    Picker("", selection: $vm.scheme) {
+                        ForEach(PartitionScheme.allCases) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented).labelsHidden().disabled(vm.running)
+                }
+                optionRow("File system") {
+                    Picker("", selection: $vm.fileSystem) {
+                        ForEach(FileSystemChoice.allCases) { Text($0.rawValue).tag($0) }
+                    }.pickerStyle(.segmented).labelsHidden().disabled(vm.running)
+                }
+                optionRow("Volume label") {
+                    TextField("RUFUS", text: $vm.label).textFieldStyle(.roundedBorder).disabled(vm.running)
+                }
+                optionRow("Boots via") {
+                    Text(vm.scheme.target).font(.system(size: 12)).foregroundStyle(.secondary)
+                }
+            } else {
+                optionRow("Verify") {
+                    Toggle("Read back and compare after writing", isOn: $vm.verify)
+                        .toggleStyle(.checkbox).disabled(vm.running)
+                }
+                Text("The image is written exactly as-is, so it decides the partitioning and boot method.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .card()
+    }
+
+    // MARK: Status
+
+    private var statusCard: some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                statusIcon
+                Text(statusTitle).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                Spacer()
+                Text("\(Int(vm.progress * 100))%")
+                    .font(.system(size: 13, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.secondary).contentTransition(.numericText())
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.1))
+                    Capsule()
+                        .fill(LinearGradient(colors: [barColor.opacity(0.85), barColor], startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(8, geo.size.width * vm.progress))
+                        .opacity(vm.progress > 0 || vm.outcome != .idle ? 1 : 0)
+                }
+            }
+            .frame(height: 8)
+            .animation(spring, value: vm.progress)
+        }
+        .card()
+        .animation(spring, value: vm.outcome)
+    }
+
+    private var barColor: Color {
+        switch vm.outcome { case .failure: return .red; case .success: return .green; case .idle: return .accentColor }
+    }
+
+    @ViewBuilder private var statusIcon: some View {
+        switch vm.outcome {
+        case .success: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green).transition(.scale.combined(with: .opacity))
+        case .failure: Image(systemName: "xmark.octagon.fill").foregroundStyle(.red).transition(.scale.combined(with: .opacity))
+        case .idle:
+            if vm.running { ProgressView().controlSize(.small) }
+            else { Image(systemName: "circle.dotted").foregroundStyle(.secondary) }
         }
     }
 
