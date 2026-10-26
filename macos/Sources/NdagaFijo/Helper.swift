@@ -186,7 +186,7 @@ enum Helper {
         if !tooBig.isEmpty {
             throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). The drive was not modified.")
         }
-        if total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
+        if scanned.total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
 
         let vol = sanitizeLabel(label, fs: fs)
         rep.progress(0.05, "Formatting as \(fs) (\(scheme))...")
