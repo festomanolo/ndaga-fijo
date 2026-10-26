@@ -166,7 +166,7 @@ final class ViewModel: ObservableObject {
         running = false; writing = false
         if let error {
             if !error.isEmpty { appendLog("ERROR: \(error)") }
-            status = "FAILED"
+            status = "FAILED"; outcome = .failure
         } else {
             progress = 1; status = "READY"
             appendLog("Done. The drive is ready.")
