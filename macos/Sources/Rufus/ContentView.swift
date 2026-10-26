@@ -67,6 +67,12 @@ private extension View { func card() -> some View { modifier(Card()) } }
 struct ContentView: View {
     @StateObject private var vm = ViewModel()
     @State private var showLog = false
+    @State private var dropTargeted = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var spring: Animation? {
+        reduceMotion ? .easeInOut(duration: 0.15) : .spring(response: 0.38, dampingFraction: 1)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
