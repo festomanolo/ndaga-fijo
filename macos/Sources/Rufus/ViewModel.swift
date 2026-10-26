@@ -25,6 +25,8 @@ final class ViewModel: ObservableObject {
     @Published var includeFixed = false { didSet { refreshDrives() } }
     @Published var log: String = ""
     @Published var showConfirm = false
+    @Published var outcome: Outcome = .idle
+    enum Outcome { case idle, success, failure }
 
     private var progressFile = ""
     private var cancelFile = ""
@@ -112,7 +114,7 @@ final class ViewModel: ObservableObject {
         if DiskService.allowDiskImages { cmd = "RUFUS_ALLOW_DISK_IMAGES=1 " + cmd }
         let script = "do shell script \"\(cmd.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\" with administrator privileges"
 
-        running = true; writing = true; progress = 0; status = "STARTING..."
+        running = true; writing = true; outcome = .idle; progress = 0; status = "STARTING..."
         appendLog("Starting \(effectiveMode == .extract ? "ISO" : "DD") write to \(selectedDrive)")
         var finished = false, failed = false
         var offset = 0
@@ -164,9 +166,9 @@ final class ViewModel: ObservableObject {
         running = false; writing = false
         if let error {
             if !error.isEmpty { appendLog("ERROR: \(error)") }
-            status = "FAILED"
+            status = "FAILED"; outcome = .failure
         } else {
-            progress = 1; status = "READY"
+            progress = 1; status = "READY"; outcome = .success
             appendLog("Done. The drive is ready.")
         }
         try? FileManager.default.removeItem(atPath: progressFile)
