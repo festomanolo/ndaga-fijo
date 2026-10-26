@@ -110,6 +110,7 @@ enum Staging {
             if r.status != 0 { rep.log("fsck_msdos: \(r.text.suffix(200))") }
             _ = Shell.run("/usr/bin/hdiutil", ["detach", "-force", node])
         }
+        rep.log("Repaired staging image")
 
         // 3. Find how much of the image is actually used.
         let fatBytes = fatSectors * bps
