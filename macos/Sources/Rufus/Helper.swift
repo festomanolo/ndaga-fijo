@@ -196,7 +196,7 @@ enum Helper {
             try rep.checkCancel()
         }
         if !tooBig.isEmpty {
-            throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). Windows ISOs with a large install.wim are not supported yet. ExFAT would write them, but most UEFI firmware cannot boot from ExFAT. The drive was not modified.")
+            throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). The drive was not modified.")
         }
         if total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
 
