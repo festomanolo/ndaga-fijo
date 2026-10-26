@@ -14,6 +14,7 @@ struct HelperError: Error { let message: String }
 final class Reporter {
     private let fh: FileHandle?
     private let cancelPath: String
+    private let started = Date()
     init(progress: String, cancel: String) {
         fh = FileHandle(forWritingAtPath: progress)
         _ = try? fh?.seekToEnd()
