@@ -229,6 +229,7 @@ enum Helper {
                 BiosBoot.remount(drive.id)
             }
         }
+
     }
 
     /// Device identifier ("diskNs1") of the data partition on a freshly erased disk.
