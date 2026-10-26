@@ -29,6 +29,7 @@ final class ViewModel: ObservableObject {
     @Published var errorMessage = ""
     @Published var speed = ""
     @Published var elapsed: TimeInterval = 0
+    @Published var etaSeconds: TimeInterval?
     private var startedAt: Date?
     enum Outcome { case idle, success, failure }
 
