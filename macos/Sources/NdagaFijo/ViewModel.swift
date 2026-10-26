@@ -106,8 +106,8 @@ final class ViewModel: ObservableObject {
 
     /// Time left, extrapolated from the average pace so far. Nil until there's enough to go on.
     var remaining: TimeInterval? {
-        guard writing, progress > 0.04, elapsed > 3 else { return nil }
-        return elapsed * (1 - progress) / progress
+        guard writing else { return nil }
+        return etaSeconds          // reported by the helper from the measured write rate
     }
 
     func eject() {
