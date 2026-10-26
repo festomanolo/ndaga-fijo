@@ -280,7 +280,7 @@ enum Helper {
             do {
                 try BiosBoot.installWindows(disk: drive.id, partition: part)
                 rep.log("Installed Windows BIOS boot code (MBR + FAT32 boot record)")
-            try BiosBoot.installWindows(disk: drive.id, partition: part)
+            } catch let e as BiosBoot.Failure {                // files are intact, so UEFI boot still works
             rep.log("Installed Windows BIOS boot code (MBR + FAT32 boot record)")
         }
     }
