@@ -51,6 +51,7 @@ enum BiosBoot {
         guard pread(pfd, &boot, 1536, 0) == 1536 else { throw Failure(message: "Cannot read back the boot record") }
         guard pwrite(pfd, boot, 1536, 6 * 512) == 1536 else { throw Failure(message: "Cannot write the backup boot record") }
         fsync(pfd)
+        close(pfd)                                      // the whole-disk node is busy while this is open
 
         // 2. Windows 7 MBR code; keep the disk signature and partition table, mark partition 1 active.
         let dfd = open("/dev/r\(disk)", O_RDWR)
