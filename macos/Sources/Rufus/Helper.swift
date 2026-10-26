@@ -267,8 +267,7 @@ enum Helper {
                     if w < 0 { throw errnoMessage("Write error in \(rel)") }
                     off += w
                 }
-                copied += UInt64(n)
-                rep.progress(0.1 + 0.88 * Double(copied) / Double(max(total, 1)), "Copying \(rel)")
+                advance(n, rel)
             }
         }
         rep.progress(0.99, "Flushing...")
