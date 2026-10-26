@@ -102,6 +102,7 @@ enum Staging {
 
         // macOS leaves a few stray clusters behind when it creates and removes its bookkeeping folders;
         // repair them here (cheap, on the SSD) so the drive that reaches the stick is clean.
+        rep.log("Detached staging image")
         if let fix = Shell.plist("/usr/bin/hdiutil", ["attach", "-imagekey", "diskimage-class=CRawDiskImage",
                                                         "-nomount", "-plist", stagePath]),
            let node = (fix["system-entities"] as? [[String: Any]])?.compactMap({ $0["dev-entry"] as? String }).first {
