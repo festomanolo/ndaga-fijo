@@ -2,3 +2,4 @@
 import CoreGraphics
 import Foundation
 let owner = CommandLine.arguments.dropFirst().first ?? "NdagaFijo"
+let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
