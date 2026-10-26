@@ -6,6 +6,64 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Materials and window chrome
+
+private struct VisualEffect: NSViewRepresentable {
+    var material: NSVisualEffectView.Material
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let v = NSVisualEffectView()
+        v.material = material; v.blendingMode = .behindWindow; v.state = .active
+        return v
+    }
+    func updateNSView(_ v: NSVisualEffectView, context: Context) { v.material = material }
+}
+
+/// Lets the content run under a transparent title bar and the window be dragged from anywhere.
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let v = NSView()
+        DispatchQueue.main.async {
+            guard let w = v.window else { return }
+            w.titlebarAppearsTransparent = true
+            w.titleVisibility = .hidden
+            w.styleMask.insert(.fullSizeContentView)
+            w.isMovableByWindowBackground = true
+            w.standardWindowButton(.zoomButton)?.isEnabled = false
+        }
+        return v
+    }
+    func updateNSView(_ v: NSView, context: Context) {}
+}
+
+/// Feedback begins on press, not release: a quick, critically damped scale.
+private struct PressStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed && !reduceMotion ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.85 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 1), value: configuration.isPressed)
+    }
+}
+
+private struct Card: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(LinearGradient(colors: [.white.opacity(0.22), .white.opacity(0.04)],
+                                                 startPoint: .top, endPoint: .bottom), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.12), radius: 12, y: 4)
+    }
+}
+private extension View { func card() -> some View { modifier(Card()) } }
+
+// MARK: - Main view
+
 struct ContentView: View {
     @StateObject private var vm = ViewModel()
     @State private var showLog = false
