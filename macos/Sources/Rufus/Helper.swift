@@ -62,6 +62,12 @@ enum Helper {
             return 0
         } catch let e as HelperError {
             rep.fail(e.message); return 1
+        } catch let e as FastIO.Failure {
+            rep.fail(e.message); return 1
+        } catch let e as WimSplit.Failure {
+            rep.fail(e.message); return 1
+        } catch let e as BiosBoot.Failure {
+            rep.fail(e.message); return 1
         } catch {
             rep.fail(error.localizedDescription); return 1
         }
@@ -81,11 +87,6 @@ enum Helper {
 
     static func ddWrite(image: String, drive: Drive, size: UInt64, verify: Bool, rep: Reporter) throws {
         try unmount(drive, rep)
-        let bs = 4 << 20
-        var raw: UnsafeMutableRawPointer?
-        guard posix_memalign(&raw, 4096, bs) == 0, let buf = raw else { throw HelperError(message: "Out of memory") }
-        defer { free(buf) }
-
         let src = open(image, O_RDONLY)
         guard src >= 0 else { throw errnoMessage("Cannot open image") }
         defer { close(src) }
@@ -93,34 +94,18 @@ enum Helper {
         guard dst >= 0 else { throw errnoMessage("Cannot open \(drive.rawPath)") }
         defer { close(dst) }
         _ = fcntl(dst, F_NOCACHE, 1)
+        _ = fcntl(src, F_RDAHEAD, 1)
 
         let span = verify ? 0.5 : 1.0
         var written: UInt64 = 0
-        while true {
-            try rep.checkCancel()
-            var got = 0
-            while got < bs {
-                let n = read(src, buf + got, bs - got)
-                if n < 0 { throw errnoMessage("Read error") }
-                if n == 0 { break }
-                got += n
-            }
-            if got == 0 { break }
-            var len = got
-            if len % 512 != 0 {                       // raw devices need whole sectors
-                let padded = (len + 511) & ~511
-                memset(buf + len, 0, padded - len)
-                len = padded
-            }
-            var off = 0
-            while off < len {
-                let n = write(dst, buf + off, len - off)
-                if n < 0 { throw errnoMessage("Write error at offset \(written)") }
-                off += n
-            }
-            written += UInt64(got)
-            rep.progress(span * Double(written) / Double(size), "Writing image...")
-        }
+        let started = Date()
+        try FastIO.copy(from: src, srcOffset: 0, to: dst, length: size, bufferSize: 8 << 20, depth: 4, padTo: 512,
+                        onBytes: { n in
+                            written += UInt64(n)
+                            let rate = Double(written) / max(Date().timeIntervalSince(started), 0.001) / 1_000_000
+                            rep.progress(span * Double(written) / Double(size), String(format: "Writing image... %.0f MB/s", rate))
+                        },
+                        cancelled: { rep.cancelled })
         fsync(dst)
         rep.log("Wrote \(written) bytes")
 
@@ -204,11 +189,14 @@ enum Helper {
             guard v?.isRegularFile == true else { continue }
             let sz = UInt64(v?.fileSize ?? 0)
             total += sz
-            if fs == "FAT32" && sz > limit { tooBig.append(String(u.path.dropFirst(srcRoot.path.count + 1))) }
+            if fs == "FAT32" && sz > limit {
+                let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
+                if rel.lowercased() != "sources/install.wim" { tooBig.append(rel) }     // install.wim is split below
+            }
             try rep.checkCancel()
         }
         if !tooBig.isEmpty {
-            throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). Windows ISOs with a large install.wim are not supported yet. ExFAT would write them, but most UEFI firmware cannot boot from ExFAT. The drive was not modified.")
+            throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). The drive was not modified.")
         }
         if total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
 
@@ -228,6 +216,11 @@ enum Helper {
         let chunk = 1 << 20
         let buf = UnsafeMutableRawPointer.allocate(byteCount: chunk, alignment: 4096)
         defer { buf.deallocate() }
+        func advance(_ n: Int, _ rel: String) {
+            copied += UInt64(n)
+            rep.progress(0.1 + 0.88 * Double(copied) / Double(max(total, 1)), "Copying \(rel)")
+        }
+        var hasBootmgr = false
         for case let u as URL in walk {
             try rep.checkCancel()
             let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
@@ -238,11 +231,31 @@ enum Helper {
                 continue
             }
             guard v?.isRegularFile == true else { continue }      // FAT/exFAT have no symlinks
+            let size = UInt64(v?.fileSize ?? 0)
+            if rel.lowercased() == "bootmgr" { hasBootmgr = true }
+
+            if fs == "FAT32" && size > limit && rel.lowercased() == "sources/install.wim" {
+                rep.log("Splitting install.wim (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))) to fit FAT32")
+                let parts = try WimSplit.split(source: u.path,
+                                               destDir: (target as NSString).deletingLastPathComponent,
+                                               maxPart: 4000 << 20,
+                                               onBytes: { advance($0, "install.swm") },
+                                               cancelled: { rep.cancelled })
+                rep.log("Wrote \(parts.count) parts")
+                continue
+            }
+
             let inFD = open(u.path, O_RDONLY)
             guard inFD >= 0 else { throw errnoMessage("Cannot read \(rel)") }
             let outFD = open(target, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
             guard outFD >= 0 else { close(inFD); throw errnoMessage("Cannot create \(rel)") }
             defer { close(inFD); close(outFD) }
+            if size >= 16 << 20 {                                  // large file: overlap read and write
+                _ = fcntl(outFD, F_NOCACHE, 1)
+                try FastIO.copy(from: inFD, srcOffset: 0, to: outFD, length: size,
+                                onBytes: { advance($0, rel) }, cancelled: { rep.cancelled })
+                continue
+            }
             while true {
                 try rep.checkCancel()
                 let n = read(inFD, buf, chunk)
@@ -254,13 +267,33 @@ enum Helper {
                     if w < 0 { throw errnoMessage("Write error in \(rel)") }
                     off += w
                 }
-                copied += UInt64(n)
-                rep.progress(0.1 + 0.88 * Double(copied) / Double(max(total, 1)), "Copying \(rel)")
+                advance(n, rel)
             }
         }
         rep.progress(0.99, "Flushing...")
         sync()
         rep.log("Copied \(copied) bytes")
+
+        // Windows media also needs boot code for legacy BIOS (UEFI boots from the files alone).
+        if hasBootmgr && scheme == "MBR" && fs == "FAT32", let part = dataVolumePartition(drive.id) {
+            rep.progress(0.995, "Installing BIOS boot code...")
+            do {
+                try BiosBoot.installWindows(disk: drive.id, partition: part)
+                rep.log("Installed Windows BIOS boot code (MBR + FAT32 boot record)")
+            } catch let e as BiosBoot.Failure {                // files are intact, so UEFI boot still works
+                rep.log("Warning: BIOS boot code was not installed (\(e.message)). UEFI boot is unaffected.")
+                _ = Shell.diskutil(["mountDisk", drive.id])
+            }
+        }
+    }
+
+    /// Device identifier ("diskNs1") of the data partition on a freshly erased disk.
+    static func dataVolumePartition(_ disk: String) -> String? {
+        guard let list = Shell.diskutilPlist(["list", "-plist", disk]),
+              let all = list["AllDisksAndPartitions"] as? [[String: Any]],
+              let parts = all.first?["Partitions"] as? [[String: Any]]
+        else { return nil }
+        return parts.first { !(($0["MountPoint"] as? String) ?? "").isEmpty }?["DeviceIdentifier"] as? String
     }
 
     /// Mount point of the data partition on a freshly erased disk (skips the hidden EFI partition).
