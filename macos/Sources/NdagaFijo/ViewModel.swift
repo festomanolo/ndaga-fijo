@@ -33,6 +33,7 @@ final class ViewModel: ObservableObject {
     private var startedAt: Date?
     enum Outcome { case idle, success, failure }
 
+    /// Developer aid for documentation screenshots: NDAGA_PREVIEW=writing|done|failed seeds that screen.
     private var progressFile = ""
     private var cancelFile = ""
 
