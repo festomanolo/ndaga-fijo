@@ -3,3 +3,4 @@ import CoreGraphics
 import Foundation
 let owner = CommandLine.arguments.dropFirst().first ?? "NdagaFijo"
 let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]] ?? []
+for w in list where (w[kCGWindowOwnerName as String] as? String) == owner && (w[kCGWindowLayer as String] as? Int) == 0 {
