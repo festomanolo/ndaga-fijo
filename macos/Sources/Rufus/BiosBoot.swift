@@ -34,7 +34,6 @@ enum BiosBoot {
         // 1. FAT32 NT boot record (sectors 0-2, backup at 6-8, loader at sector 12).
         let pfd = open("/dev/r\(partition)", O_RDWR)
         guard pfd >= 0 else { throw Failure(message: "Cannot open /dev/r\(partition): \(String(cString: strerror(errno)))") }
-        defer { close(pfd) }
         var s0 = [UInt8](repeating: 0, count: 512)
         guard pread(pfd, &s0, 512, 0) == 512, Array(s0[0x52..<0x5A]) == Array("FAT32   ".utf8) else {
             throw Failure(message: "The partition is not FAT32")
