@@ -120,7 +120,7 @@
         <h3>The 4 GB wall</h3><p>FAT32 can't hold a file over 4 GB, and current Windows ISOs carry an <code class="i">install.wim</code> that big. Ndaga Fijo splits it into <code class="i">.swm</code> parts that Windows Setup reads natively.</p></article>
       <article class="card rv"><div class="ico" aria-hidden="true">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 3h6"/></svg></div>
-        <h3>Painfully slow copies</h3><p>Copying a 7,000-file ISO straight onto a stick took 34 minutes in our test. Ndaga Fijo stages it on your SSD and streams it once: 2 min 25 s.</p></article>
+        <h3>Painfully slow copies</h3><p>Copying a 7,000-file ISO straight onto a stick took 34 minutes in our test. Ndaga Fijo stages it on your SSD and streams it once: 2 min 26 s.</p></article>
       <article class="card rv"><div class="ico" aria-hidden="true">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
         <h3>Fear of the wrong disk</h3><p>It only lists removable drives, refuses the disk macOS runs from, and makes you confirm by name before it erases anything.</p></article>
@@ -140,20 +140,20 @@
       <p class="lead">Same Windows XP ISO (712 MB, 6,959 files), same drive, same Mac. Everything below was timed end to end.</p>
     </div>
     <div class="card bench rv" role="figure" aria-labelledby="bench-title">
-      <div class="big"><b class="grad-text">14×</b><div><h3 id="bench-title">faster than copying the files across</h3><p style="margin:4px 0 0;color:var(--muted)">2 min 25 s versus 34 min 10 s for the same drive contents.</p></div></div>
+      <div class="big"><b class="grad-text">14×</b><div><h3 id="bench-title">faster than copying the files across</h3><p style="margin:4px 0 0;color:var(--muted)">2 min 26 s versus 34 min 10 s for the same drive contents.</p></div></div>
       <div class="bars">
         <div class="bar-row"><div class="lab">Plain file copy<small>macOS <code class="i">cp -R</code> onto the stick</small></div><div class="track"><div class="fill slow" style="--w:100%">34m 10s</div></div></div>
         <div class="bar-row"><div class="lab">Copy, Spotlight off<small>same, indexing disabled</small></div><div class="track"><div class="fill slow" style="--w:83.4%">28m 30s</div></div></div>
-        <div class="bar-row"><div class="lab">Ndaga Fijo<small>stage on SSD, stream once</small></div><div class="track"><div class="fill fast" style="--w:7.1%">2m 25s</div></div></div>
+        <div class="bar-row"><div class="lab">Ndaga Fijo<small>stage on SSD, stream once</small></div><div class="track"><div class="fill fast" style="--w:7.1%">2m 26s</div></div></div>
         <div class="bar-row"><div class="lab">Raw device write<small>hardware ceiling for this stick</small></div><div class="track"><div class="fill ref" style="--w:3.3%">1m 07s</div></div></div>
       </div>
       <div class="stats">
         <div class="stat"><b>14×</b><span>faster than a plain copy</span></div>
-        <div class="stat"><b>13 MB/s</b><span>sustained write to the stick</span></div>
+        <div class="stat"><b>14 MB/s</b><span>sustained write to the stick</span></div>
         <div class="stat"><b>6,959</b><span>files in the test image</span></div>
-        <div class="stat"><b>10.7 MB/s</b><span>raw limit of the test stick</span></div>
+        <div class="stat"><b>100%</b><span>of files identical to the ISO (diff-checked)</span></div>
       </div>
-      <p class="fine"><strong>Test setup.</strong> 31.5 GB USB stick (measured raw sequential write: 10.7 MB/s), Intel Mac running macOS 26, Windows XP Professional SP3 ISO (712 MB). "Plain file copy" is <code class="i">cp -R</code> from the mounted ISO to the formatted stick (one run). The raw-device bar is <code class="i">dd</code> of the ISO to the device: the fastest this stick can physically accept the data, not a bootable layout. Your numbers scale with your stick's speed; the ratio comes from avoiding thousands of slow per-file updates on the device. We did not time other tools.</p>
+      <p class="fine"><strong>Test setup.</strong> 31.5 GB USB stick (measured raw sequential write: 10.7 MB/s), Intel Mac running macOS 26, Windows XP Professional SP3 ISO (712 MB). "Plain file copy" is <code class="i">cp -R</code> from the mounted ISO to the formatted stick (one run); Ndaga Fijo's time is the whole job from clicking start to finished: scan 6 s, format 10 s, stage 37 s, flush and repair 21 s, stream 58 s. The raw-device bar is <code class="i">dd</code> of the ISO to the device: the fastest this stick can physically accept the data, not a bootable layout. Your numbers scale with your stick's speed; the ratio comes from avoiding thousands of slow per-file updates on the device. We did not time other tools.</p>
     </div>
 
     <div class="grid g2" style="margin-top:18px">
