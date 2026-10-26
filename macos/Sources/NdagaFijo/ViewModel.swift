@@ -35,6 +35,7 @@ final class ViewModel: ObservableObject {
 
     /// Developer aid for documentation screenshots: NDAGA_PREVIEW=writing|done|failed seeds that screen.
     init() {
+        guard let p = ProcessInfo.processInfo.environment["NDAGA_PREVIEW"] else { return }
     private var progressFile = ""
     private var cancelFile = ""
 
