@@ -377,11 +377,8 @@ struct ContentView: View {
         if panel.runModal() == .OK, let url = panel.url { vm.imagePath = url.path }
     }
 
-    private func section<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            content()
-        }
+    private func label(_ s: String) -> some View {
+        Text(s.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.6).foregroundStyle(.secondary)
     }
 
     private func row<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
