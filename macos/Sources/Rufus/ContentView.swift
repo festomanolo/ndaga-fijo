@@ -140,17 +140,10 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
             } else {
                 ScrollView {
-                    Text(vm.log).font(.system(size: 11, design: .monospaced))
-                        .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
-                }.frame(height: 130)
-            }
-            HStack {
-                Button("Checksums") { vm.computeChecksums(); showLog = true }
-                    .disabled(vm.running || vm.imageInfo == nil)
-                Spacer()
-                if vm.writing { Button("CANCEL") { vm.cancel() } }
-                Button("START") { vm.showConfirm = true }
-                    .keyboardShortcut(.defaultAction).disabled(!vm.canStart)
+                    VStack(spacing: 6) {
+                        ForEach(vm.drives) { driveRow($0) }
+                    }
+                }.frame(maxHeight: 132)
             }
         }
         .padding(18)
