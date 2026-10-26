@@ -231,6 +231,20 @@ enum Helper {
                 continue
             }
             guard v?.isRegularFile == true else { continue }      // FAT/exFAT have no symlinks
+            let size = UInt64(v?.fileSize ?? 0)
+            if rel.lowercased() == "bootmgr" { hasBootmgr = true }
+
+            if fs == "FAT32" && size > limit && rel.lowercased() == "sources/install.wim" {
+                rep.log("Splitting install.wim (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))) to fit FAT32")
+                let parts = try WimSplit.split(source: u.path,
+                                               destDir: (target as NSString).deletingLastPathComponent,
+                                               maxPart: 4000 << 20,
+                                               onBytes: { advance($0, "install.swm") },
+                                               cancelled: { rep.cancelled })
+                rep.log("Wrote \(parts.count) parts")
+                continue
+            }
+
             let inFD = open(u.path, O_RDONLY)
             guard inFD >= 0 else { throw errnoMessage("Cannot read \(rel)") }
             let outFD = open(target, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
