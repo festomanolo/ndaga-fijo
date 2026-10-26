@@ -306,6 +306,69 @@ struct ContentView: View {
         }
     }
 
+    private var statusTitle: String {
+        switch vm.outcome {
+        case .success: return "Done. The drive is ready."
+        case .failure: return "Something went wrong. Open the log for details."
+        case .idle: return vm.running ? vm.status.capitalized : (vm.canStart ? "Ready" : "Choose a drive and an image")
+        }
+    }
+
+    // MARK: Footer
+
+    private var footer: some View {
+        HStack(spacing: 10) {
+            Button { showLog = true } label: { Label("Log", systemImage: "text.alignleft") }
+                .buttonStyle(PressStyle())
+            Button { vm.computeChecksums(); showLog = true } label: { Label("Checksums", systemImage: "number") }
+                .buttonStyle(PressStyle()).disabled(vm.running || vm.imageInfo == nil)
+            Spacer()
+            if vm.writing {
+                Button("Cancel") { vm.cancel() }.buttonStyle(PressStyle()).controlSize(.large)
+            }
+            Button { vm.showConfirm = true } label: {
+                Text(vm.writing ? "Writing…" : "Start")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 130, height: 38)
+                    .foregroundStyle(.white)
+                    .background(Capsule().fill(LinearGradient(colors: [Color.accentColor.opacity(0.85), Color.accentColor],
+                                                              startPoint: .top, endPoint: .bottom)))
+                    .shadow(color: Color.accentColor.opacity(0.35), radius: 8, y: 3)
+            }
+            .buttonStyle(PressStyle())
+            .keyboardShortcut(.defaultAction)
+            .disabled(!vm.canStart)
+            .opacity(vm.canStart ? 1 : 0.4)
+            .animation(spring, value: vm.canStart)
+        }
+        .font(.system(size: 12))
+    }
+
+    // MARK: Log
+
+    private var logSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Log").font(.system(size: 17, weight: .semibold))
+                Spacer()
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(vm.log, forType: .string)
+                }
+                Button("Done") { showLog = false }.keyboardShortcut(.defaultAction)
+            }
+            ScrollView {
+                Text(vm.log.isEmpty ? "Nothing yet." : vm.log)
+                    .font(.system(size: 11, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled).padding(10)
+            }
+            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .padding(20).frame(width: 540, height: 340)
+    }
+
+    // MARK: Helpers
+
     private func chooseImage() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = false
