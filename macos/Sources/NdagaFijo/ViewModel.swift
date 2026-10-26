@@ -38,6 +38,7 @@ final class ViewModel: ObservableObject {
         guard let p = ProcessInfo.processInfo.environment["NDAGA_PREVIEW"] else { return }
         drives = [Drive(id: "disk7", name: "UDisk", size: 31_457_280_000, bus: "USB", removable: true)]
         selectedDrive = "disk7"
+        switch p {
     private var progressFile = ""
     private var cancelFile = ""
 
