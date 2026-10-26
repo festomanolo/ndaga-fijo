@@ -198,6 +198,7 @@ final class ViewModel: ObservableObject {
     }
 
     private func finish(error: String?) {
+        if let t = startedAt { elapsed = Date().timeIntervalSince(t) }
         running = false; writing = false
         if let error {
             if !error.isEmpty { appendLog("ERROR: \(error)"); errorMessage = error }
