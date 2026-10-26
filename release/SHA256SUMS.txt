@@ -1,0 +1,2 @@
+c93c002845aba4c9d5ab60b1e367004ad7381a67342dd38cf021127102cf08ea  NdagaFijo-1.0.0-macOS-universal.zip
+8b84c0f7c7935b76dca5bac5fd3bab97b61f88b8d753f94617e12fa72a0c9687  NdagaFijo-1.0.0-macOS-universal.dmg

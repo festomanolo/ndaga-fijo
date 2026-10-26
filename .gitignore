@@ -11,3 +11,5 @@ build/
 .next/
 target/
 *.log
+release/*.zip
+release/*.dmg
