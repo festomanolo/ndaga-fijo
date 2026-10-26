@@ -168,7 +168,7 @@ final class ViewModel: ObservableObject {
             if !error.isEmpty { appendLog("ERROR: \(error)") }
             status = "FAILED"; outcome = .failure
         } else {
-            progress = 1; status = "READY"
+            progress = 1; status = "READY"; outcome = .success
             appendLog("Done. The drive is ready.")
         }
         try? FileManager.default.removeItem(atPath: progressFile)
