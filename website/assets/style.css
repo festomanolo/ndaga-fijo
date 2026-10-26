@@ -17,6 +17,7 @@ html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);
   font:400 17px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter","Segoe UI",system-ui,sans-serif;
   -webkit-font-smoothing:antialiased;overflow-x:hidden}
+h1,h2{text-wrap:balance}
 h1,h2,h3{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",system-ui,sans-serif;margin:0;line-height:1.08}
 h1{font-size:clamp(2.4rem,6vw,4.4rem);font-weight:700;letter-spacing:-.035em}
 h2{font-size:clamp(1.9rem,4vw,3rem);font-weight:700;letter-spacing:-.03em}
