@@ -105,6 +105,7 @@ enum Staging {
                                                         "-nomount", "-plist", stagePath]),
            let node = (fix["system-entities"] as? [[String: Any]])?.compactMap({ $0["dev-entry"] as? String }).first {
             let r = Shell.run("/sbin/fsck_msdos", ["-y", node.replacingOccurrences(of: "/dev/disk", with: "/dev/rdisk")])
+            if r.status != 0 { rep.log("fsck_msdos: \(r.text.suffix(200))") }
         // 3. Find how much of the image is actually used.
         let fatBytes = fatSectors * bps
         var lastCluster = 1
