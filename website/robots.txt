@@ -1,0 +1,6 @@
+# Ndaga Fijo lives at https://festomanolo.com/ndaga-fijo/
+# Search engines read robots.txt only from the domain root: add the line below to
+# https://festomanolo.com/robots.txt so crawlers find the sitemap.
+User-agent: *
+Allow: /
+Sitemap: https://festomanolo.com/ndaga-fijo/sitemap.xml
