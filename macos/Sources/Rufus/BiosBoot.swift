@@ -67,6 +67,7 @@ enum BiosBoot {
 
         remount(disk)
     }
+
         _ = Shell.diskutil(["mountDisk", disk])
     }
 }
