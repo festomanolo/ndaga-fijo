@@ -395,6 +395,8 @@ struct ContentView: View {
                     Text("\(ViewModel.clock(vm.elapsed)) elapsed")
                     if let left = vm.remaining { Text("·"); Text("about \(ViewModel.clock(left)) left") }
                 }
+                .font(.system(size: 13, weight: .medium).monospacedDigit()).foregroundStyle(.secondary)
+                .padding(.top, 2)
             }
             Text("Keep the drive connected until this finishes.").font(.system(size: 12)).foregroundStyle(.tertiary)
             Button("Cancel") { vm.cancel() }.glassButton().controlSize(.large)
