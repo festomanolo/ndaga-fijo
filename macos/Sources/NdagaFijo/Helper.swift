@@ -195,6 +195,7 @@ enum Helper {
         let er = Shell.diskutil(["eraseDisk", fs, vol, scheme, drive.id])
         rep.log(er.text.trimmingCharacters(in: .whitespacesAndNewlines))
         if er.status != 0 { throw HelperError(message: "Format failed") }
+        rep.log("Formatted")
 
         let cores = ProcessInfo.processInfo.activeProcessorCount
         let threads = Int(ProcessInfo.processInfo.environment["NDAGA_THREADS"] ?? "") ?? max(2, min(8, cores))
