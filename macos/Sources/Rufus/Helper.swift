@@ -279,6 +279,7 @@ enum Helper {
             rep.progress(0.995, "Installing BIOS boot code...")
             do {
                 try BiosBoot.installWindows(disk: drive.id, partition: part)
+                rep.log("Installed Windows BIOS boot code (MBR + FAT32 boot record)")
             try BiosBoot.installWindows(disk: drive.id, partition: part)
             rep.log("Installed Windows BIOS boot code (MBR + FAT32 boot record)")
         }
