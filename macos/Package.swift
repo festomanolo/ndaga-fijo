@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-    name: "Rufus",
+    name: "NdagaFijo",
     platforms: [.macOS(.v13)],
     targets: [
-        .executableTarget(name: "Rufus", path: "Sources/Rufus")
+        .executableTarget(name: "NdagaFijo", path: "Sources/NdagaFijo")
     ]
 )
