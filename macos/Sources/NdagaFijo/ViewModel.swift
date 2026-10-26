@@ -42,6 +42,7 @@ final class ViewModel: ObservableObject {
         case "writing": writing = true; running = true; progress = 0.62; status = "Writing to the drive..."; speed = "13 MB/s"; elapsed = 88; etaSeconds = 54
         case "done": outcome = .success; progress = 1; elapsed = 145
         case "failed": outcome = .failure; errorMessage = "The drive was removed while writing."
+        default: break
     private var progressFile = ""
     private var cancelFile = ""
 
