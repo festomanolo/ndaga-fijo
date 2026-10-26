@@ -193,6 +193,7 @@ final class ViewModel: ObservableObject {
                     } else { status = text }
                 }
             } else if line.hasPrefix("L ") { appendLog(String(line.dropFirst(2))) }
+            else if line.hasPrefix("E ") { etaSeconds = Double(line.dropFirst(2)) }
             else if line == "DONE" { finished = true }
             else if line.hasPrefix("ERR ") { failed = true; errorMessage = String(line.dropFirst(4)); appendLog("ERROR: " + line.dropFirst(4)); status = "FAILED" }
         }
