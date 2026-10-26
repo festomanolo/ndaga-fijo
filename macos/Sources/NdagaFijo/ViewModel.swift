@@ -96,6 +96,7 @@ final class ViewModel: ObservableObject {
         outcome = .idle; progress = 0; status = "READY"; speed = ""; errorMessage = ""
     }
 
+    /// "2:05" / "1:02:09"
     func eject() {
         let disk = selectedDrive
         Task {
