@@ -22,7 +22,7 @@ final class Reporter {
     }
     private func emit(_ s: String) { try? fh?.write(contentsOf: Data((s + "\n").utf8)) }
     func progress(_ f: Double, _ msg: String) { emit("P \(min(max(f, 0), 1)) \(msg)") }
-    func log(_ s: String) { emit("L \(s)") }
+    func log(_ s: String) { emit("L [+\(Int(Date().timeIntervalSince(started)))s] \(s)") }
     func eta(_ seconds: Double) { emit("E \(Int(seconds))") }
     func done() { emit("DONE") }
     func fail(_ s: String) { emit("ERR \(s)") }
