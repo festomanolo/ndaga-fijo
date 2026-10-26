@@ -179,25 +179,10 @@ enum Helper {
 
         // Scan before erasing anything, so impossible jobs fail while the drive is still intact.
         rep.progress(0.03, "Scanning image...")
-        var total: UInt64 = 0
-        var tooBig: [String] = []
-        let fm = FileManager.default
-        let limit: UInt64 = 0xFFFF_FFFF
-        let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .isRegularFileKey]
-        guard let scan = fm.enumerator(at: srcRoot, includingPropertiesForKeys: keys, options: []) else {
-            throw HelperError(message: "Cannot read image contents")
-        }
-        for case let u as URL in scan {
-            let v = try? u.resourceValues(forKeys: Set(keys))
-            guard v?.isRegularFile == true else { continue }
-            let sz = UInt64(v?.fileSize ?? 0)
-            total += sz
-            if fs == "FAT32" && sz > limit {
-                let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
-                if rel.lowercased() != "sources/install.wim" { tooBig.append(rel) }     // install.wim is split below
-            }
-            try rep.checkCancel()
-        }
+        let scanned = try TreeCopy.scan(srcRoot, rep: rep)
+        let tooBig = scanned.files.filter {
+            fs == "FAT32" && $0.size > TreeCopy.fat32Limit && $0.rel.lowercased() != "sources/install.wim"      // install.wim is split
+        }.map { $0.rel }
         if !tooBig.isEmpty {
             throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). The drive was not modified.")
         }
