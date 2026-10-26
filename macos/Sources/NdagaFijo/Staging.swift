@@ -103,6 +103,7 @@ enum Staging {
         // repair them here (cheap, on the SSD) so the drive that reaches the stick is clean.
         if let fix = Shell.plist("/usr/bin/hdiutil", ["attach", "-imagekey", "diskimage-class=CRawDiskImage",
                                                         "-nomount", "-plist", stagePath]),
+           let node = (fix["system-entities"] as? [[String: Any]])?.compactMap({ $0["dev-entry"] as? String }).first {
         // 3. Find how much of the image is actually used.
         let fatBytes = fatSectors * bps
         var lastCluster = 1
