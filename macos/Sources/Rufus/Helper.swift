@@ -94,6 +94,7 @@ enum Helper {
         guard dst >= 0 else { throw errnoMessage("Cannot open \(drive.rawPath)") }
         defer { close(dst) }
         _ = fcntl(dst, F_NOCACHE, 1)
+        _ = fcntl(src, F_RDAHEAD, 1)
 
         let span = verify ? 0.5 : 1.0
         var written: UInt64 = 0
