@@ -75,15 +75,67 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            section("Drive Properties") {
-                row("Device") {
-                    Picker("", selection: $vm.selectedDrive) {
-                        if vm.drives.isEmpty { Text("No removable drive found").tag("") }
-                        ForEach(vm.drives) { Text($0.title).tag($0.id) }
-                    }.labelsHidden().disabled(vm.running)
-                    Button { vm.refreshDrives() } label: { Image(systemName: "arrow.clockwise") }
-                        .help("Refresh drive list").disabled(vm.running)
+        ZStack {
+            VisualEffect(material: .underWindowBackground).ignoresSafeArea()
+            WindowConfigurator().frame(width: 0, height: 0)
+
+            VStack(spacing: 14) {
+                header
+                driveCard
+                imageCard
+                if vm.imageInfo != nil { optionsCard.transition(.opacity.combined(with: .move(edge: .top))) }
+                statusCard
+                footer
+            }
+            .padding(.horizontal, 24).padding(.bottom, 22).padding(.top, 14)
+        }
+        .frame(width: 580)
+        .animation(spring, value: vm.imageInfo != nil)
+        .animation(spring, value: vm.effectiveMode)
+        .onAppear { vm.refreshDrives() }
+        .sheet(isPresented: $showLog) { logSheet }
+        .alert("Erase \(vm.selectedDriveTitle)?", isPresented: $vm.showConfirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Erase and Write", role: .destructive) { vm.start() }
+        } message: {
+            Text("All data on this drive will be permanently destroyed. This cannot be undone.")
+        }
+    }
+
+    // MARK: Header
+
+    private var header: some View {
+        HStack(spacing: 14) {
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable().frame(width: 52, height: 52)
+                .shadow(color: .black.opacity(0.2), radius: 6, y: 3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Rufus").font(.system(size: 28, weight: .semibold)).tracking(-0.5)
+                Text("Create bootable USB drives").font(.system(size: 13)).foregroundStyle(.secondary)
+            }
+            Spacer()
+        }
+    }
+
+    // MARK: Drive
+
+    private var driveCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                label("Drive")
+                Spacer()
+                Toggle("Show hard drives", isOn: $vm.includeFixed)
+                    .toggleStyle(.checkbox).font(.caption).disabled(vm.running)
+                Button { vm.refreshDrives() } label: { Image(systemName: "arrow.clockwise") }
+                    .buttonStyle(PressStyle()).help("Refresh").disabled(vm.running)
+            }
+            if vm.drives.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "externaldrive").font(.system(size: 22)).foregroundStyle(.tertiary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("No removable drive found").font(.system(size: 13, weight: .medium))
+                        Text("Plug in a USB drive or SD card.").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Toggle("List USB hard drives", isOn: $vm.includeFixed).disabled(vm.running)
                 row("Boot selection") {
