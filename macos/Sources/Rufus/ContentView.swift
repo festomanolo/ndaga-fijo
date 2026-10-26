@@ -383,7 +383,7 @@ struct ContentView: View {
 
     private func optionRow<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         HStack {
-            Text(title).frame(width: 120, alignment: .leading)
+            Text(title).font(.system(size: 13)).frame(width: 120, alignment: .leading)
             content()
         }
     }
