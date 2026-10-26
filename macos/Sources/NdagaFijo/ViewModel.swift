@@ -142,6 +142,7 @@ final class ViewModel: ObservableObject {
         if DiskService.allowDiskImages { cmd = "NDAGA_ALLOW_DISK_IMAGES=1 " + cmd }
         let script = "do shell script \"\(cmd.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\" with administrator privileges"
 
+        startedAt = Date(); elapsed = 0
         running = true; writing = true; outcome = .idle; errorMessage = ""; speed = ""; progress = 0; status = "Starting…"
         appendLog("Starting \(effectiveMode == .extract ? "ISO" : "DD") write to \(selectedDrive)")
         var finished = false, failed = false
