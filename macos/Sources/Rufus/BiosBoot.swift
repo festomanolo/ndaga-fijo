@@ -69,6 +69,7 @@ enum BiosBoot {
     }
 
     /// DiskArbitration needs a moment after raw writes; retry until the volume shows up.
+    static func remount(_ disk: String) {
         _ = Shell.diskutil(["mountDisk", disk])
     }
 }
