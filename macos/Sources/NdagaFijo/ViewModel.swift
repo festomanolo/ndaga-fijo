@@ -97,6 +97,8 @@ final class ViewModel: ObservableObject {
     }
 
     /// "2:05" / "1:02:09"
+    static func clock(_ t: TimeInterval) -> String {
+        let s = Int(t.rounded())
     func eject() {
         let disk = selectedDrive
         Task {
