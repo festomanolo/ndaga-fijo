@@ -65,6 +65,7 @@ enum BiosBoot {
         guard pwrite(dfd, mbr, 512, 0) == 512 else { throw Failure(message: "Cannot write the MBR") }
         fsync(dfd)
 
+        remount(disk)
         _ = Shell.diskutil(["mountDisk", disk])
     }
 }
