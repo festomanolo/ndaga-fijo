@@ -39,6 +39,7 @@ final class ViewModel: ObservableObject {
         drives = [Drive(id: "disk7", name: "UDisk", size: 31_457_280_000, bus: "USB", removable: true)]
         selectedDrive = "disk7"
         switch p {
+        case "writing": writing = true; running = true; progress = 0.62; status = "Writing to the drive..."; speed = "13 MB/s"; elapsed = 88; etaSeconds = 54
     private var progressFile = ""
     private var cancelFile = ""
 
