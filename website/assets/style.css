@@ -97,7 +97,7 @@ header.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(180%) blur(
   font:650 .9rem ui-monospace,SFMono-Regular,Menlo,monospace;color:#fff;transition:width 1.3s cubic-bezier(.2,.8,.2,1);white-space:nowrap;min-width:max-content}
 .fill.slow{background:linear-gradient(90deg,#5b6478,#8a93a8)}
 .fill.fast{background:var(--grad);box-shadow:0 0 24px rgba(31,181,176,.5)}
-.fill.ref{background:repeating-linear-gradient(135deg,rgba(255,255,255,.28) 0 8px,rgba(255,255,255,.14) 8px 16px)}
+.fill.ref{color:var(--ink);background:repeating-linear-gradient(135deg,rgba(255,255,255,.28) 0 8px,rgba(255,255,255,.14) 8px 16px)}
 .in .fill{width:var(--w)}
 .big{display:flex;gap:18px 40px;flex-wrap:wrap;align-items:baseline;margin-bottom:26px}
 .big b{font-size:clamp(3rem,8vw,5.6rem);letter-spacing:-.04em;line-height:1}
