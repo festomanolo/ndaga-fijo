@@ -45,6 +45,7 @@ final class ViewModel: ObservableObject {
         default: break
         }
     }
+
     private var progressFile = ""
     private var cancelFile = ""
 
