@@ -391,6 +391,8 @@ struct ContentView: View {
                 Text(vm.status).font(.system(size: 16, weight: .semibold)).lineLimit(1)
                 Text(vm.speed.isEmpty ? vm.selectedDriveTitle : "\(vm.speed) · \(vm.selectedDriveTitle)")
                     .font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text("\(ViewModel.clock(vm.elapsed)) elapsed")
             }
             Text("Keep the drive connected until this finishes.").font(.system(size: 12)).foregroundStyle(.tertiary)
             Button("Cancel") { vm.cancel() }.glassButton().controlSize(.large)
