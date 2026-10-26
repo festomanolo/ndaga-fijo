@@ -1,0 +1,2 @@
+recursive-include src/ndaga_fijo/NdagaFijo.app *
+include LICENSE.txt
