@@ -103,6 +103,8 @@ final class ViewModel: ObservableObject {
                          : String(format: "%d:%02d", s / 60, s % 60)
     }
 
+    /// Time left, extrapolated from the average pace so far. Nil until there's enough to go on.
+    var remaining: TimeInterval? {
     func eject() {
         let disk = selectedDrive
         Task {
