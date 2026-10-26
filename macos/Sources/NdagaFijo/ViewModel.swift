@@ -101,6 +101,8 @@ final class ViewModel: ObservableObject {
         let s = Int(t.rounded())
         return s >= 3600 ? String(format: "%d:%02d:%02d", s / 3600, s % 3600 / 60, s % 60)
                          : String(format: "%d:%02d", s / 60, s % 60)
+    }
+
     func eject() {
         let disk = selectedDrive
         Task {
