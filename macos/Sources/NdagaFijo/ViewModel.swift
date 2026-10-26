@@ -33,6 +33,19 @@ final class ViewModel: ObservableObject {
     private var startedAt: Date?
     enum Outcome { case idle, success, failure }
 
+    /// Developer aid for documentation screenshots: NDAGA_PREVIEW=writing|done|failed seeds that screen.
+    init() {
+        guard let p = ProcessInfo.processInfo.environment["NDAGA_PREVIEW"] else { return }
+        drives = [Drive(id: "disk7", name: "UDisk", size: 31_457_280_000, bus: "USB", removable: true)]
+        selectedDrive = "disk7"
+        switch p {
+        case "writing": writing = true; running = true; progress = 0.62; status = "Writing to the drive..."; speed = "13 MB/s"; elapsed = 88; etaSeconds = 54
+        case "done": outcome = .success; progress = 1; elapsed = 145
+        case "failed": outcome = .failure; errorMessage = "The drive was removed while writing."
+        default: break
+        }
+    }
+
     private var progressFile = ""
     private var cancelFile = ""
 
@@ -55,6 +68,7 @@ final class ViewModel: ObservableObject {
     }
 
     func refreshDrives() {
+        if ProcessInfo.processInfo.environment["NDAGA_PREVIEW"] != nil { return }
         Task {
             let fixed = includeFixed
             let found = await Task.detached { DiskService.listDrives(includeFixed: fixed) }.value
