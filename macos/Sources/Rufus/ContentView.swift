@@ -137,52 +137,8 @@ struct ContentView: View {
                         Text("Plug in a USB drive or SD card.").font(.caption).foregroundStyle(.secondary)
                     }
                 }
-                Toggle("List USB hard drives", isOn: $vm.includeFixed).disabled(vm.running)
-                row("Boot selection") {
-                    Text(vm.imagePath.isEmpty ? "Select an ISO or disk image" : (vm.imagePath as NSString).lastPathComponent)
-                        .lineLimit(1).truncationMode(.middle)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
-                        .background(RoundedRectangle(cornerRadius: 5).fill(.quaternary))
-                    Button("SELECT") { chooseImage() }.disabled(vm.running)
-                }
-                if let info = vm.imageInfo { Text(info.summary).font(.caption).foregroundStyle(.secondary) }
-                if let w = vm.modeWarning { Text(w).font(.caption).foregroundStyle(.orange) }
-                row("Write mode") {
-                    Picker("", selection: $vm.mode) {
-                        ForEach(WriteMode.allCases) { Text($0.title).tag($0) }
-                    }.labelsHidden().disabled(vm.running)
-                }
-            }
-            section("Format Options") {
-                row("Partition scheme") {
-                    Picker("", selection: $vm.scheme) {
-                        ForEach(PartitionScheme.allCases) { Text($0.rawValue).tag($0) }
-                    }.labelsHidden().disabled(vm.running || vm.effectiveMode == .dd)
-                }
-                if vm.effectiveMode != .dd {
-                    row("Target system") { Text(vm.scheme.target).foregroundStyle(.secondary) }
-                }
-                row("Volume label") {
-                    TextField("", text: $vm.label).disabled(vm.running || vm.effectiveMode == .dd)
-                }
-                row("File system") {
-                    Picker("", selection: $vm.fileSystem) {
-                        ForEach(FileSystemChoice.allCases) { Text($0.rawValue).tag($0) }
-                    }.labelsHidden().disabled(vm.running || vm.effectiveMode == .dd)
-                }
-                Toggle("Verify written data (DD mode)", isOn: $vm.verify)
-                    .disabled(vm.running || vm.effectiveMode != .dd)
-            }
-            section("Status") {
-                ProgressView(value: vm.progress).progressViewStyle(.linear)
-                HStack {
-                    Text(vm.status).font(.system(.caption, design: .monospaced)).lineLimit(1)
-                    Spacer()
-                    Text("\(Int(vm.progress * 100))%").font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            DisclosureGroup("Log", isExpanded: $showLog) {
+                .frame(maxWidth: .infinity, minHeight: 54, alignment: .leading)
+            } else {
                 ScrollView {
                     Text(vm.log).font(.system(size: 11, design: .monospaced))
                         .frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled)
