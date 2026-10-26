@@ -72,6 +72,7 @@ enum BiosBoot {
     static func remount(_ disk: String) {
         for _ in 0..<6 {
             _ = Shell.diskutil(["mountDisk", disk])
+            if Helper.dataVolumeMountPoint(disk) != nil { return }
         _ = Shell.diskutil(["mountDisk", disk])
     }
 }
