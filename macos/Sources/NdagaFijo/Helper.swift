@@ -194,12 +194,14 @@ enum Helper {
         rep.log(er.text.trimmingCharacters(in: .whitespacesAndNewlines))
         if er.status != 0 { throw HelperError(message: "Format failed") }
 
-        guard let dest = dataVolumeMountPoint(drive.id) else { throw HelperError(message: "Cannot find the new volume") }
-        rep.log("Copying to \(dest)")
-
-        var copied: UInt64 = 0
-        guard let walk = fm.enumerator(at: srcRoot, includingPropertiesForKeys: keys, options: []) else {
-            throw HelperError(message: "Cannot read image contents")
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        let threads = Int(ProcessInfo.processInfo.environment["NDAGA_THREADS"] ?? "") ?? max(2, min(8, cores))
+        var staged = false
+        if fs == "FAT32", !Staging.disabled, Staging.hasRoom(for: scanned.total), let part = dataVolumePartition(drive.id) {
+            rep.log("Using the fast path: parallel staging (\(threads) threads), then one sequential write")
+            _ = Shell.diskutil(["unmountDisk", drive.id])
+            try Staging.writeFAT32(scan: scanned, drive: drive, partition: part, label: vol, threads: threads, rep: rep)
+            staged = true
         }
         let chunk = 1 << 20
         let buf = UnsafeMutableRawPointer.allocate(byteCount: chunk, alignment: 4096)
