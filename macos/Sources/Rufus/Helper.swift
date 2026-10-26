@@ -250,6 +250,12 @@ enum Helper {
             let outFD = open(target, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
             guard outFD >= 0 else { close(inFD); throw errnoMessage("Cannot create \(rel)") }
             defer { close(inFD); close(outFD) }
+            if size >= 16 << 20 {                                  // large file: overlap read and write
+                _ = fcntl(outFD, F_NOCACHE, 1)
+                try FastIO.copy(from: inFD, srcOffset: 0, to: outFD, length: size,
+                                onBytes: { advance($0, rel) }, cancelled: { rep.cancelled })
+                continue
+            }
             while true {
                 try rep.checkCancel()
                 let n = read(inFD, buf, chunk)
