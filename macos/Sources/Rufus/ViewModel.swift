@@ -25,6 +25,8 @@ final class ViewModel: ObservableObject {
     @Published var includeFixed = false { didSet { refreshDrives() } }
     @Published var log: String = ""
     @Published var showConfirm = false
+    @Published var outcome: Outcome = .idle
+    enum Outcome { case idle, success, failure }
 
     private var progressFile = ""
     private var cancelFile = ""
