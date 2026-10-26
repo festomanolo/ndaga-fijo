@@ -216,6 +216,11 @@ enum Helper {
         let chunk = 1 << 20
         let buf = UnsafeMutableRawPointer.allocate(byteCount: chunk, alignment: 4096)
         defer { buf.deallocate() }
+        func advance(_ n: Int, _ rel: String) {
+            copied += UInt64(n)
+            rep.progress(0.1 + 0.88 * Double(copied) / Double(max(total, 1)), "Copying \(rel)")
+        }
+        var hasBootmgr = false
         for case let u as URL in walk {
             try rep.checkCancel()
             let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
