@@ -170,6 +170,7 @@ final class ViewModel: ObservableObject {
         Task { @MainActor in
             while running {
                 drain(&offset, &finished, &failed)
+                if let t = startedAt { elapsed = Date().timeIntervalSince(t) }
                 try? await Task.sleep(nanoseconds: 250_000_000)
             }
         }
