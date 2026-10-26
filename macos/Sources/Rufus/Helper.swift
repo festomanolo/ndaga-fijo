@@ -278,6 +278,7 @@ enum Helper {
         if hasBootmgr && scheme == "MBR" && fs == "FAT32", let part = dataVolumePartition(drive.id) {
             rep.progress(0.995, "Installing BIOS boot code...")
             do {
+                try BiosBoot.installWindows(disk: drive.id, partition: part)
             try BiosBoot.installWindows(disk: drive.id, partition: part)
             rep.log("Installed Windows BIOS boot code (MBR + FAT32 boot record)")
         }
