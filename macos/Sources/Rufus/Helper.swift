@@ -62,6 +62,12 @@ enum Helper {
             return 0
         } catch let e as HelperError {
             rep.fail(e.message); return 1
+        } catch let e as FastIO.Failure {
+            rep.fail(e.message); return 1
+        } catch let e as WimSplit.Failure {
+            rep.fail(e.message); return 1
+        } catch let e as BiosBoot.Failure {
+            rep.fail(e.message); return 1
         } catch {
             rep.fail(error.localizedDescription); return 1
         }
