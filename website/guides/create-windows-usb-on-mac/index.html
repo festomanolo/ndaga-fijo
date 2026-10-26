@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>How to Create a Bootable Windows USB on a Mac (10 &amp; 11)</title>
+<meta name="description" content="Step-by-step: make a bootable Windows 10 or 11 USB drive on macOS from an ISO, handle the 4 GB install.wim limit, and boot it on UEFI or legacy BIOS PCs.">
+<link rel="canonical" href="https://festomanolo.com/ndaga-fijo/guides/create-windows-usb-on-mac/">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<meta property="og:type" content="article"><meta property="og:title" content="How to create a bootable Windows USB on a Mac">
+<meta property="og:description" content="A clear, step-by-step guide for Windows 10 and 11 installer USBs made on macOS.">
+<meta property="og:url" content="https://festomanolo.com/ndaga-fijo/guides/create-windows-usb-on-mac/">
+<meta property="og:image" content="https://festomanolo.com/ndaga-fijo/assets/img/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="../../assets/img/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../../assets/style.css">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"HowTo","name":"How to create a bootable Windows USB on a Mac","totalTime":"PT15M",
+ "tool":[{"@type":"HowToTool","name":"Ndaga Fijo"}],
+ "supply":[{"@type":"HowToSupply","name":"Windows 10 or 11 ISO"},{"@type":"HowToSupply","name":"USB drive of 8 GB or more"}],
+ "step":[
+  {"@type":"HowToStep","name":"Download the Windows ISO","text":"Download the official ISO from Microsoft and confirm its SHA-256 checksum."},
+  {"@type":"HowToStep","name":"Open Ndaga Fijo and choose the ISO","text":"Drop the ISO onto the window or click to browse."},
+  {"@type":"HowToStep","name":"Choose the USB drive","text":"Select your removable drive. Everything on it will be erased."},
+  {"@type":"HowToStep","name":"Write to Drive","text":"Click Write to Drive, confirm, and enter your password. The app formats the drive, splits install.wim if needed, and copies the files."},
+  {"@type":"HowToStep","name":"Boot from the USB","text":"Eject, plug it into the target PC and pick the USB drive in the boot menu."}]},
+{"@type":"BreadcrumbList","itemListElement":[
+ {"@type":"ListItem","position":1,"name":"Ndaga Fijo","item":"https://festomanolo.com/ndaga-fijo/"},
+ {"@type":"ListItem","position":2,"name":"Create a Windows USB on Mac","item":"https://festomanolo.com/ndaga-fijo/guides/create-windows-usb-on-mac/"}]}]}
+</script>
+</head>
+<body>
+<header class="nav"><div class="wrap"><a class="brand" href="../../"><img src="../../assets/img/icon-56.png" width="28" height="28" alt="">Ndaga Fijo</a>
+<nav><a href="../../#speed">Speed</a><a href="../../#faq">FAQ</a><a class="btn small primary" href="https://github.com/festomanolo/ndaga-fijo/releases/latest">Download</a></nav></div></header>
+<main class="article">
+<p class="crumbs"><a href="../../">Ndaga Fijo</a> › Guides › Windows USB on Mac</p>
+<h1>How to create a bootable Windows USB on a Mac</h1>
+<p>Windows installers are the awkward case on macOS. A Windows ISO isn't a "hybrid" image you can copy block for block, and its biggest file usually breaks the FAT32 limit. This guide shows the reliable way, using Ndaga Fijo, and explains what's happening so you can fix problems.</p>
+
+<h2>What you need</h2>
+<ul><li>A Mac running macOS 13 or later (Apple Silicon or Intel).</li><li>A USB drive of 8 GB or more. <strong>Everything on it will be erased.</strong></li><li>A Windows 10 or 11 ISO from Microsoft, and <a href="../../">Ndaga Fijo</a>.</li></ul>
+
+<h2>Step by step</h2>
+<ol>
+<li><strong>Get the ISO</strong> from Microsoft's download page, and check its SHA-256 against the value Microsoft publishes. Ndaga Fijo's <em>Checksums</em> button computes it for you.</li>
+<li><strong>Open Ndaga Fijo</strong> and drop the ISO onto the window. It reports "ISO image: files will be extracted to the drive", which is correct for Windows.</li>
+<li><strong>Pick your USB drive.</strong> Only removable drives are listed, and the disk macOS runs from is never offered.</li>
+<li>Open <strong>Options</strong> if you want to change anything. For most PCs from the last decade, <em>MBR + FAT32</em> boots in both UEFI and legacy BIOS mode.</li>
+<li>Click <strong>Write to Drive</strong>, confirm the drive name, and enter your Mac password (writing to a disk needs administrator rights).</li>
+<li>Wait for <em>Your drive is ready</em>, click <strong>Eject</strong>, and boot the target PC from the USB drive.</li></ol>
+
+<h2>What happens under the hood</h2>
+<p>The app formats the drive, copies the ISO's files, and handles the two Windows-specific problems:</p>
+<ul>
+<li><strong>The 4 GB limit.</strong> If <code class="i">sources/install.wim</code> is larger than FAT32 allows, it's split into <code class="i">install.swm</code>, <code class="i">install2.swm</code> and so on. Windows Setup reads split images natively. <a href="../install-wim-larger-than-4gb-fat32-mac/">Details here.</a></li>
+<li><strong>Booting on older PCs.</strong> For MBR + FAT32 media containing <code class="i">bootmgr</code>, it installs the Windows MBR and FAT32 boot record so legacy BIOS can boot. UEFI machines boot from the files alone.</li></ul>
+<div class="callout"><strong>Speed.</strong> To avoid thousands of slow per-file writes to the stick, it builds the drive on your Mac's SSD first and then streams it across in one pass. In our test that was 14× faster than copying the files directly. <a href="../../#speed">See the benchmark.</a></div>
+
+<h2>If it doesn't boot</h2>
+<ul><li>Choose the USB entry in the boot menu (often F12, F10, Esc or Option on a Mac).</li>
+<li>If the PC is UEFI-only with Secure Boot, keep <em>MBR + FAT32</em> or switch to GPT; both carry the UEFI boot files.</li>
+<li>Try another USB port, and avoid USB hubs.</li>
+<li>Still stuck? Copy the app's log (Log → Copy) into a <a href="https://github.com/festomanolo/ndaga-fijo/issues">GitHub issue</a>. We haven't verified booting on every machine and want to hear what you find.</li></ul>
+
+<h2>FAQ</h2>
+<p><strong>Can I just copy the ISO's files in Finder?</strong> You can, but the drive won't have boot code for older PCs, a large <code class="i">install.wim</code> won't fit on FAT32, and the copy is slow.</p>
+<p><strong>Why not write the ISO directly?</strong> Direct writers need a hybrid image. Windows ISOs aren't hybrid, so a block-for-block copy usually won't boot.</p>
+<p><a class="btn primary" href="https://github.com/festomanolo/ndaga-fijo/releases/latest">Download Ndaga Fijo</a></p>
+</main>
+<footer><div class="wrap"><p>Ndaga Fijo is free software (GPL v3 or later), based on <a href="https://rufus.ie">Rufus</a>. Not affiliated with Microsoft or the Rufus project.</p></div></footer>
+</body></html>
