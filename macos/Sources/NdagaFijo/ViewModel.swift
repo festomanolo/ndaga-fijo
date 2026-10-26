@@ -107,6 +107,8 @@ final class ViewModel: ObservableObject {
     var remaining: TimeInterval? {
         guard writing, progress > 0.04, elapsed > 3 else { return nil }
         return elapsed * (1 - progress) / progress
+    }
+
     func eject() {
         let disk = selectedDrive
         Task {
