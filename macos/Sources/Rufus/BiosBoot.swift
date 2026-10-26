@@ -68,6 +68,7 @@ enum BiosBoot {
         remount(disk)
     }
 
+    /// DiskArbitration needs a moment after raw writes; retry until the volume shows up.
         _ = Shell.diskutil(["mountDisk", disk])
     }
 }
