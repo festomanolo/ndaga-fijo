@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Ndaga Fijo: Bootable USB Creator for Mac (Windows ISO Ready)</title>
+<meta name="description" content="Make a bootable USB on your Mac from any ISO, including Windows 10 and 11. Ndaga Fijo splits the 4 GB install.wim automatically and writes up to 14× faster than a plain copy. Free, open source, native.">
+<link rel="canonical" href="https://festomanolo.com/ndaga-fijo/">
+<meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1">
+<meta name="theme-color" content="#070b14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f7fb" media="(prefers-color-scheme: light)">
+<meta name="author" content="festomanolo">
+<meta name="keywords" content="bootable USB Mac, create Windows 11 USB on Mac, Rufus for Mac, Rufus alternative macOS, balenaEtcher alternative, ISO to USB Mac, install.wim larger than 4GB FAT32, Windows USB installer macOS">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Ndaga Fijo">
+<meta property="og:title" content="Ndaga Fijo: the fast bootable USB creator for Mac">
+<meta property="og:description" content="Windows-ready bootable USBs on macOS. Splits install.wim over 4 GB, installs BIOS boot code, and writes up to 14× faster than copying files.">
+<meta property="og:url" content="https://festomanolo.com/ndaga-fijo/">
+<meta property="og:image" content="https://festomanolo.com/ndaga-fijo/assets/img/og-image.png">
+<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Ndaga Fijo app window with a USB logo on a teal and blue glass background">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Ndaga Fijo: the fast bootable USB creator for Mac">
+<meta name="twitter:description" content="Windows-ready bootable USBs on macOS, free and open source.">
+<meta name="twitter:image" content="https://festomanolo.com/ndaga-fijo/assets/img/og-image.png">
+
+<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<link rel="preload" as="image" href="assets/img/setup.webp" type="image/webp">
+<link rel="stylesheet" href="assets/style.css">
+<noscript><style>.rv{opacity:1;transform:none}.fill{width:var(--w)}</style></noscript>
+
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@graph":[
+    {
+      "@type":"SoftwareApplication",
+      "@id":"https://festomanolo.com/ndaga-fijo/#app",
+      "name":"Ndaga Fijo",
+      "alternateName":["Ndaga Fijo for Mac","Bootable USB creator for macOS"],
+      "description":"A native macOS app that creates bootable USB drives from ISO and disk images, including Windows installers with automatic install.wim splitting.",
+      "applicationCategory":"UtilitiesApplication",
+      "applicationSubCategory":"Bootable USB creator",
+      "operatingSystem":"macOS 13 or later",
+      "softwareVersion":"1.0.0",
+      "license":"https://www.gnu.org/licenses/gpl-3.0.html",
+      "url":"https://festomanolo.com/ndaga-fijo/",
+      "downloadUrl":"https://github.com/festomanolo/ndaga-fijo/releases/latest",
+      "installUrl":"https://pypi.org/project/ndaga-fijo/",
+      "image":"https://festomanolo.com/ndaga-fijo/assets/img/og-image.png",
+      "screenshot":["https://festomanolo.com/ndaga-fijo/assets/img/setup.webp","https://festomanolo.com/ndaga-fijo/assets/img/writing.webp","https://festomanolo.com/ndaga-fijo/assets/img/done.webp"],
+      "author":{"@type":"Person","name":"festomanolo","url":"https://github.com/festomanolo"},
+      "isBasedOn":{"@type":"SoftwareApplication","name":"Rufus","url":"https://rufus.ie"},
+      "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},
+      "featureList":["Writes ISO and disk images to USB on macOS","Splits Windows install.wim over 4 GB for FAT32","Installs legacy BIOS boot code for Windows media","Fast staged writes for ISOs with thousands of files","Only lists removable drives and never the boot disk"]
+    },
+    {
+      "@type":"WebSite","@id":"https://festomanolo.com/ndaga-fijo/#site","url":"https://festomanolo.com/ndaga-fijo/","name":"Ndaga Fijo","inLanguage":"en"
+    },
+    {
+      "@type":"FAQPage",
+      "mainEntity":[
+        {"@type":"Question","name":"How do I make a bootable Windows 11 USB on a Mac?","acceptedAnswer":{"@type":"Answer","text":"Open Ndaga Fijo, choose the Windows ISO, choose your USB drive and click Write to Drive. It formats the drive, splits install.wim if it is larger than 4 GB, and copies everything over."}},
+        {"@type":"Question","name":"Why does my Windows ISO not fit on a FAT32 USB drive?","acceptedAnswer":{"@type":"Answer","text":"FAT32 cannot store any single file larger than 4 GB, and the install.wim in current Windows ISOs often exceeds that. Ndaga Fijo splits it into install.swm parts that Windows Setup reads natively."}},
+        {"@type":"Question","name":"Is Ndaga Fijo a Rufus alternative for Mac?","acceptedAnswer":{"@type":"Answer","text":"Rufus only runs on Windows. Ndaga Fijo is a native macOS app based on Rufus and follows the same workflow of picking an image and a drive, then writing."}},
+        {"@type":"Question","name":"Is it free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Ndaga Fijo is free and open source under the GNU GPL v3 or later."}},
+        {"@type":"Question","name":"Can it erase my Mac's disk by mistake?","acceptedAnswer":{"@type":"Answer","text":"No. It only lists removable drives, refuses the disk macOS is running from, and asks for confirmation before erasing anything."}}
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="./"><img src="assets/img/icon-56.png" width="28" height="28" alt="" decoding="async">Ndaga Fijo</a>
+    <nav aria-label="Main">
+      <a href="#problems">Why</a><a href="#speed">Speed</a><a href="#how">How it works</a><a href="#faq">FAQ</a>
+      <a class="btn small primary" href="https://github.com/festomanolo/ndaga-fijo/releases/latest">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+<section class="hero">
+  <div class="aurora" aria-hidden="true"><i></i><i></i></div>
+  <div class="wrap">
+    <p class="eyebrow">Free · Open source · Native for macOS</p>
+    <h1>A bootable USB on your Mac, <span class="grad-text">in minutes, not half an hour.</span></h1>
+    <p class="lead">Ndaga Fijo turns any ISO into a bootable drive, Windows 10 and 11 included, with a native Liquid Glass app. It builds the drive on your Mac's SSD and writes it to the stick in one fast pass.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/festomanolo/ndaga-fijo/releases/latest">Download for macOS</a>
+      <button class="chip" type="button" data-copy="pip install ndaga-fijo" aria-label="Copy install command">pip install ndaga-fijo <span>copy</span></button>
+    </div>
+    <p class="badges"><b>Apple Silicon + Intel</b><b>macOS 13+</b><b>GPL v3</b><b>No tracking, no account</b></p>
+    <div class="stage">
+      <img class="shot l" src="assets/img/writing.webp" width="560" height="700" alt="Ndaga Fijo writing screen showing a progress ring at 62 percent with time remaining" decoding="async">
+      <img class="shot r" src="assets/img/done.webp" width="560" height="700" alt="Ndaga Fijo finished screen: Your drive is ready" decoding="async">
+      <img class="shot c" src="assets/img/setup.webp" width="560" height="700" alt="Ndaga Fijo setup screen with Windows ISO, USB drive and options in Liquid Glass cards" fetchpriority="high">
+    </div>
+  </div>
+</section>
+
+<section id="problems">
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">What it solves</p>
+      <h2>Making a Windows USB on a Mac shouldn't be a project.</h2>
+      <p class="lead">Rufus is brilliant, but it only runs on Windows. The usual Mac workarounds are slow, fragile, or just don't work. Ndaga Fijo fixes the four things that go wrong.</p>
+    </div>
+    <div class="grid g4">
+      <article class="card rv"><div class="ico" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg></div>
+        <h3>The 4 GB wall</h3><p>FAT32 can't hold a file over 4 GB, and current Windows ISOs carry an <code class="i">install.wim</code> that big. Ndaga Fijo splits it into <code class="i">.swm</code> parts that Windows Setup reads natively.</p></article>
+      <article class="card rv"><div class="ico" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 3h6"/></svg></div>
+        <h3>Painfully slow copies</h3><p>Copying a 7,000-file ISO straight onto a stick took 34 minutes in our test. Ndaga Fijo stages it on your SSD and streams it once: 2 min 25 s.</p></article>
+      <article class="card rv"><div class="ico" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3>Fear of the wrong disk</h3><p>It only lists removable drives, refuses the disk macOS runs from, and makes you confirm by name before it erases anything.</p></article>
+      <article class="card rv"><div class="ico" aria-hidden="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg></div>
+        <h3>No native Mac app</h3><p>Boot Camp Assistant is gone and Rufus is Windows-only. This is a real Mac app: SwiftUI, Liquid Glass, Apple Silicon and Intel in one download.</p></article>
+    </div>
+  </div>
+</section>
+
+<section id="speed">
+  <div class="aurora" aria-hidden="true"><i></i><i></i></div>
+  <div class="wrap">
+    <div class="sec-head rv">
+      <p class="eyebrow">Benchmarks</p>
+      <h2>Measured on a real USB stick, not a lab SSD.</h2>
+      <p class="lead">Same Windows XP ISO (712 MB, 6,959 files), same drive, same Mac. Everything below was timed end to end.</p>
+    </div>
+    <div class="card bench rv" role="figure" aria-labelledby="bench-title">
+      <div class="big"><b class="grad-text">14×</b><div><h3 id="bench-title">faster than copying the files across</h3><p style="margin:4px 0 0;color:var(--muted)">2 min 25 s versus 34 min 10 s for the same drive contents.</p></div></div>
+      <div class="bars">
+        <div class="bar-row"><div class="lab">Plain file copy<small>macOS <code class="i">cp -R</code> onto the stick</small></div><div class="track"><div class="fill slow" style="--w:100%">34m 10s</div></div></div>
+        <div class="bar-row"><div class="lab">Copy, Spotlight off<small>same, indexing disabled</small></div><div class="track"><div class="fill slow" style="--w:83.4%">28m 30s</div></div></div>
+        <div class="bar-row"><div class="lab">Ndaga Fijo<small>stage on SSD, stream once</small></div><div class="track"><div class="fill fast" style="--w:7.1%">2m 25s</div></div></div>
+        <div class="bar-row"><div class="lab">Raw device write<small>hardware ceiling for this stick</small></div><div class="track"><div class="fill ref" style="--w:3.3%">1m 07s</div></div></div>
+      </div>
+      <div class="stats">
+        <div class="stat"><b>14×</b><span>faster than a plain copy</span></div>
+        <div class="stat"><b>13 MB/s</b><span>sustained write to the stick</span></div>
+        <div class="stat"><b>6,959</b><span>files in the test image</span></div>
+        <div class="stat"><b>10.7 MB/s</b><span>raw limit of the test stick</span></div>
+      </div>
+      <p class="fine"><strong>Test setup.</strong> 31.5 GB USB stick (measured raw sequential write: 10.7 MB/s), Intel Mac running macOS 26, Windows XP Professional SP3 ISO (712 MB). "Plain file copy" is <code class="i">cp -R</code> from the mounted ISO to the formatted stick (one run). The raw-device bar is <code class="i">dd</code> of the ISO to the device: the fastest this stick can physically accept the data, not a bootable layout. Your numbers scale with your stick's speed; the ratio comes from avoiding thousands of slow per-file updates on the device. We did not time other tools.</p>
+    </div>
+
+    <div class="grid g2" style="margin-top:18px">
+      <div class="card rv"><h3>Why a plain copy is so slow</h3><p>Every file on FAT32 means several tiny metadata writes to the stick, and flash drives are terrible at tiny writes. 6,959 files turned 712 MB into a half-hour job while the same bytes written in one stream take about a minute.</p></div>
+      <div class="card rv"><h3>What Ndaga Fijo does instead</h3><p>macOS builds the filesystem inside a staging image on your SSD, where metadata is cheap. The finished image is checked, repaired, and streamed to the drive in one sequential pass, with the next block read while the last one is written.</p></div>
+    </div>
+
+    <div class="card rv" style="margin-top:18px">
+      <h3 style="margin-bottom:14px">The pipeline</h3>
+      <svg class="pipe" viewBox="0 0 960 190" role="img" aria-label="Pipeline: ISO image to SSD staging image to a single sequential stream to the USB drive">
+        <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#1fb5b0"/><stop offset="1" stop-color="#3b6cff"/></linearGradient></defs>
+        <rect class="box" x="10" y="50" width="200" height="90" rx="20"/><text x="110" y="92" text-anchor="middle">ISO image</text><text class="sub" x="110" y="114" text-anchor="middle">mounted read-only</text>
+        <rect class="box" x="290" y="50" width="220" height="90" rx="20"/><text x="400" y="92" text-anchor="middle">Staging image on SSD</text><text class="sub" x="400" y="114" text-anchor="middle">files copied, install.wim split, repaired</text>
+        <rect class="box" x="590" y="50" width="170" height="90" rx="20"/><text x="675" y="92" text-anchor="middle">One stream</text><text class="sub" x="675" y="114" text-anchor="middle">8 MB blocks, overlapped</text>
+        <rect class="box" x="830" y="50" width="120" height="90" rx="20"/><text x="890" y="92" text-anchor="middle">USB drive</text><text class="sub" x="890" y="114" text-anchor="middle">boot-ready</text>
+        <path class="flow" d="M214 95H286"/><path class="flow" d="M514 95H586"/><path class="flow" d="M764 95H826"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="sec-head rv"><p class="eyebrow">How it works</p><h2>Three steps. No terminal.</h2></div>
+    <div class="steps">
+      <article class="card step rv"><h3>Choose an image</h3><p>Drop in an ISO or disk image. Ndaga Fijo tells you whether it will be written as-is (hybrid images) or extracted (Windows and plain ISOs).</p></article>
+      <article class="card step rv"><h3>Choose a drive</h3><p>Removable drives appear automatically. The one you pick is named again in the confirmation, so you always know what gets erased.</p></article>
+      <article class="card step rv"><h3>Write to Drive</h3><p>A live ring shows progress, speed, and a time estimate based on the measured write rate. When it's done you can eject with one click.</p></article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head rv"><p class="eyebrow">Features</p><h2>Everything a Rufus user expects, on a Mac.</h2></div>
+    <div class="grid g3">
+      <article class="card rv"><h3>Windows installers</h3><p>FAT32 with automatic <code class="i">install.wim</code> splitting. MBR + FAT32 drives also get Windows BIOS boot code; UEFI boots from the files alone.</p></article>
+      <article class="card rv"><h3>Direct image writing</h3><p>Hybrid ISOs and raw images are written block for block with an optional read-back verify.</p></article>
+      <article class="card rv"><h3>MBR or GPT</h3><p>Pick the partition scheme and FAT32 or exFAT, and set the volume label, from a tidy options panel.</p></article>
+      <article class="card rv"><h3>Checksums built in</h3><p>MD5, SHA-1, SHA-256 and SHA-512 of your image in one click, so you can confirm the download.</p></article>
+      <article class="card rv"><h3>Cancel any time</h3><p>Cancel mid-write safely, and see exactly what happened in the log, which you can copy for bug reports.</p></article>
+      <article class="card rv"><h3>Accessible by design</h3><p>Respects Reduce Motion and Reduce Transparency, keyboard shortcuts, and light and dark appearance.</p></article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="sec-head rv"><p class="eyebrow">Compared</p><h2>Where it fits.</h2></div>
+    <div class="card rv scroll" style="padding:8px">
+      <table class="table">
+        <thead><tr><th>Capability</th><th>Ndaga Fijo</th><th>Raw image writers</th><th>Manual copy in Finder</th></tr></thead>
+        <tbody>
+          <tr><td>Runs natively on macOS</td><td class="us ok">Yes</td><td class="ok">Yes</td><td class="ok">Yes</td></tr>
+          <tr><td>Bootable Windows ISO (non-hybrid)</td><td class="us ok">Yes, UEFI + BIOS (MBR/FAT32)</td><td class="no">No: needs a hybrid image</td><td class="mid">UEFI only, if files fit</td></tr>
+          <tr><td>Handles install.wim over 4 GB</td><td class="us ok">Splits automatically</td><td class="no">N/A</td><td class="no">Fails on FAT32</td></tr>
+          <tr><td>Fast with thousands of files</td><td class="us ok">Staged, one stream</td><td class="ok">Single stream</td><td class="no">Slowest</td></tr>
+          <tr><td>Protects the boot disk</td><td class="us ok">Always</td><td class="ok">Yes</td><td class="mid">Your responsibility</td></tr>
+          <tr><td>Open source</td><td class="us ok">GPL v3</td><td class="mid">Varies</td><td class="mid">N/A</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fine" style="text-align:center">"Raw image writers" means tools that only copy an image block for block, such as balenaEtcher. We haven't timed other tools, so this table is about capability, not speed.</p>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap" style="max-width:820px">
+    <div class="sec-head rv"><p class="eyebrow">FAQ</p><h2>Questions, answered.</h2></div>
+    <details open><summary>How do I make a bootable Windows 11 USB on a Mac?</summary><p>Open Ndaga Fijo, drop in the Windows ISO, pick your USB drive and click Write to Drive. It formats the drive, splits <code class="i">install.wim</code> if it's over 4 GB, copies everything, and installs boot code. <a href="guides/create-windows-usb-on-mac/">Read the step-by-step guide.</a></p></details>
+    <details><summary>Why won't my Windows ISO fit on a FAT32 drive?</summary><p>FAT32 can't store any single file over 4 GB, and the <code class="i">install.wim</code> in many Windows ISOs is larger. Ndaga Fijo splits it into <code class="i">install.swm</code> parts, which Windows Setup reads natively. <a href="guides/install-wim-larger-than-4gb-fat32-mac/">More on the 4 GB limit.</a></p></details>
+    <details><summary>Is this a Rufus for Mac?</summary><p>Rufus runs only on Windows. Ndaga Fijo is a native macOS app based on Rufus, following the same workflow, and it credits Rufus and ms-sys in its source. It isn't affiliated with or endorsed by the Rufus project.</p></details>
+    <details><summary>Is it free and safe?</summary><p>It's free and open source under GPL v3 or later; read or build the <a href="https://github.com/festomanolo/ndaga-fijo">source</a> yourself. It only lists removable drives, refuses the disk macOS runs from, and asks for confirmation before erasing. It asks for your password because writing to a disk needs administrator rights.</p></details>
+    <details><summary>Does it work on Apple Silicon and Intel Macs?</summary><p>Yes. The download is a universal app for macOS 13 or later.</p></details>
+    <details><summary>macOS says the app can't be opened. What now?</summary><p>The app is signed ad hoc and not yet notarized by Apple. Right-click it and choose Open, or go to System Settings → Privacy &amp; Security and click "Open Anyway". Installing with <code class="i">pip install ndaga-fijo</code> avoids the download prompt.</p></details>
+    <details><summary>What isn't supported yet?</summary><p>NTFS and UEFI:NTFS drives, Windows To Go, Windows setup customization, bad-block checks, and BIOS boot for non-hybrid Linux ISOs. Most Linux ISOs are hybrid and write fine in direct mode. We haven't verified booting on every machine, so please report what you find.</p></details>
+  </div>
+</section>
+
+<section class="dl" id="download">
+  <div class="aurora" aria-hidden="true"><i></i><i></i></div>
+  <div class="wrap">
+    <div class="card rv">
+      <img src="assets/img/icon-128.png" width="96" height="96" alt="Ndaga Fijo icon" loading="lazy" style="border-radius:22px;margin-bottom:18px">
+      <h2>Get Ndaga Fijo</h2>
+      <p class="lead" style="margin:14px auto 28px">Free for macOS 13+, universal for Apple Silicon and Intel.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/festomanolo/ndaga-fijo/releases/latest">Download from GitHub</a>
+        <button class="chip" type="button" data-copy="pip install ndaga-fijo">pip install ndaga-fijo <span>copy</span></button>
+      </div>
+      <p class="fine">After <code class="i">pip install</code>, run <code class="i">ndaga-fijo</code> to open the app, or <code class="i">ndaga-fijo --install</code> to copy it to Applications.</p>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap cols">
+    <div><strong style="color:var(--ink)">Ndaga Fijo</strong><p>A native macOS bootable USB creator. Free software under GPL v3 or later.</p></div>
+    <div><p>Based on <a href="https://rufus.ie">Rufus</a> by Pete Batard and contributors, and boot code from ms-sys. Not affiliated with or endorsed by those projects.</p></div>
+    <div><p><a href="https://github.com/festomanolo/ndaga-fijo">Source on GitHub</a><br><a href="https://pypi.org/project/ndaga-fijo/">PyPI</a><br><a href="guides/create-windows-usb-on-mac/">Windows USB on Mac</a><br><a href="guides/install-wim-larger-than-4gb-fat32-mac/">install.wim over 4 GB</a></p></div>
+  </div>
+</footer>
+<script src="assets/app.js" defer></script>
+</body>
+</html>
