@@ -189,7 +189,10 @@ enum Helper {
             guard v?.isRegularFile == true else { continue }
             let sz = UInt64(v?.fileSize ?? 0)
             total += sz
-            if fs == "FAT32" && sz > limit { tooBig.append(String(u.path.dropFirst(srcRoot.path.count + 1))) }
+            if fs == "FAT32" && sz > limit {
+                let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
+                if rel.lowercased() != "sources/install.wim" { tooBig.append(rel) }     // install.wim is split below
+            }
             try rep.checkCancel()
         }
         if !tooBig.isEmpty {
