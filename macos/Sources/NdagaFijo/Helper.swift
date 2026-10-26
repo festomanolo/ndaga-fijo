@@ -231,6 +231,7 @@ enum Helper {
         }
 
         // Staged writes leave the volume unmounted; bring it back so it shows up in Finder.
+        if staged, !(hasBootmgr && scheme == "MBR") { BiosBoot.remount(drive.id) }
     }
 
     /// Device identifier ("diskNs1") of the data partition on a freshly erased disk.
