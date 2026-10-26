@@ -181,6 +181,7 @@ enum Helper {
         // Scan before erasing anything, so impossible jobs fail while the drive is still intact.
         rep.progress(0.03, "Scanning image...")
         let scanned = try TreeCopy.scan(srcRoot, rep: rep)
+        rep.log("Scanned \(scanned.files.count) files")
         let tooBig = scanned.files.filter {
             fs == "FAT32" && $0.size > TreeCopy.fat32Limit && $0.rel.lowercased() != "sources/install.wim"      // install.wim is split
         }.map { $0.rel }
