@@ -107,6 +107,7 @@ enum Staging {
             let r = Shell.run("/sbin/fsck_msdos", ["-y", node.replacingOccurrences(of: "/dev/disk", with: "/dev/rdisk")])
             if r.status != 0 { rep.log("fsck_msdos: \(r.text.suffix(200))") }
             _ = Shell.run("/usr/bin/hdiutil", ["detach", "-force", node])
+        }
         // 3. Find how much of the image is actually used.
         let fatBytes = fatSectors * bps
         var lastCluster = 1
