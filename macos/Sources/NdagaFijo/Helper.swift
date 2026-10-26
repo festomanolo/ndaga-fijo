@@ -14,6 +14,7 @@ struct HelperError: Error { let message: String }
 final class Reporter {
     private let fh: FileHandle?
     private let cancelPath: String
+    private let started = Date()
     init(progress: String, cancel: String) {
         fh = FileHandle(forWritingAtPath: progress)
         _ = try? fh?.seekToEnd()
@@ -21,7 +22,7 @@ final class Reporter {
     }
     private func emit(_ s: String) { try? fh?.write(contentsOf: Data((s + "\n").utf8)) }
     func progress(_ f: Double, _ msg: String) { emit("P \(min(max(f, 0), 1)) \(msg)") }
-    func log(_ s: String) { emit("L \(s)") }
+    func log(_ s: String) { emit("L [+\(Int(Date().timeIntervalSince(started)))s] \(s)") }
     func eta(_ seconds: Double) { emit("E \(Int(seconds))") }
     func done() { emit("DONE") }
     func fail(_ s: String) { emit("ERR \(s)") }
@@ -180,6 +181,7 @@ enum Helper {
         // Scan before erasing anything, so impossible jobs fail while the drive is still intact.
         rep.progress(0.03, "Scanning image...")
         let scanned = try TreeCopy.scan(srcRoot, rep: rep)
+        rep.log("Scanned \(scanned.files.count) files")
         let tooBig = scanned.files.filter {
             fs == "FAT32" && $0.size > TreeCopy.fat32Limit && $0.rel.lowercased() != "sources/install.wim"      // install.wim is split
         }.map { $0.rel }
@@ -193,6 +195,7 @@ enum Helper {
         let er = Shell.diskutil(["eraseDisk", fs, vol, scheme, drive.id])
         rep.log(er.text.trimmingCharacters(in: .whitespacesAndNewlines))
         if er.status != 0 { throw HelperError(message: "Format failed") }
+        rep.log("Formatted")
 
         let cores = ProcessInfo.processInfo.activeProcessorCount
         let threads = Int(ProcessInfo.processInfo.environment["NDAGA_THREADS"] ?? "") ?? max(2, min(8, cores))

@@ -64,6 +64,7 @@ enum Staging {
         close(pfd)
         guard got == headBytes, pwrite(sfd, head, headBytes, 0) == headBytes else { throw Failure(message: "Cannot clone the FAT layout") }
 
+        rep.log("Cloned FAT layout")
         // 2. Attach and copy in parallel.
         rep.progress(0.08, "Preparing files...")
         let att = Shell.plist("/usr/bin/hdiutil", ["attach", "-imagekey", "diskimage-class=CRawDiskImage",
@@ -101,6 +102,7 @@ enum Staging {
 
         // macOS leaves a few stray clusters behind when it creates and removes its bookkeeping folders;
         // repair them here (cheap, on the SSD) so the drive that reaches the stick is clean.
+        rep.log("Detached staging image")
         if let fix = Shell.plist("/usr/bin/hdiutil", ["attach", "-imagekey", "diskimage-class=CRawDiskImage",
                                                         "-nomount", "-plist", stagePath]),
            let node = (fix["system-entities"] as? [[String: Any]])?.compactMap({ $0["dev-entry"] as? String }).first {
@@ -108,6 +110,7 @@ enum Staging {
             if r.status != 0 { rep.log("fsck_msdos: \(r.text.suffix(200))") }
             _ = Shell.run("/usr/bin/hdiutil", ["detach", "-force", node])
         }
+        rep.log("Repaired staging image")
 
         // 3. Find how much of the image is actually used.
         let fatBytes = fatSectors * bps
