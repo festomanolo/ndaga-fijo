@@ -66,6 +66,7 @@ enum BiosBoot {
         fsync(dfd)
 
         remount(disk)
+    }
         _ = Shell.diskutil(["mountDisk", disk])
     }
 }
