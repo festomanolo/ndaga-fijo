@@ -212,59 +212,8 @@ enum Helper {
             rep.progress(0.99, "Flushing...")
             sync()
         }
-        var hasBootmgr = false
-        for case let u as URL in walk {
-            try rep.checkCancel()
-            let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
-            let target = (dest as NSString).appendingPathComponent(rel)
-            let v = try? u.resourceValues(forKeys: Set(keys))
-            if v?.isDirectory == true {
-                try fm.createDirectory(atPath: target, withIntermediateDirectories: true)
-                continue
-            }
-            guard v?.isRegularFile == true else { continue }      // FAT/exFAT have no symlinks
-            let size = UInt64(v?.fileSize ?? 0)
-            if rel.lowercased() == "bootmgr" { hasBootmgr = true }
-
-            if fs == "FAT32" && size > limit && rel.lowercased() == "sources/install.wim" {
-                rep.log("Splitting install.wim (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))) to fit FAT32")
-                let parts = try WimSplit.split(source: u.path,
-                                               destDir: (target as NSString).deletingLastPathComponent,
-                                               maxPart: 4000 << 20,
-                                               onBytes: { advance($0, "install.swm") },
-                                               cancelled: { rep.cancelled })
-                rep.log("Wrote \(parts.count) parts")
-                continue
-            }
-
-            let inFD = open(u.path, O_RDONLY)
-            guard inFD >= 0 else { throw errnoMessage("Cannot read \(rel)") }
-            let outFD = open(target, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-            guard outFD >= 0 else { close(inFD); throw errnoMessage("Cannot create \(rel)") }
-            defer { close(inFD); close(outFD) }
-            if size >= 16 << 20 {                                  // large file: overlap read and write
-                _ = fcntl(outFD, F_NOCACHE, 1)
-                try FastIO.copy(from: inFD, srcOffset: 0, to: outFD, length: size,
-                                onBytes: { advance($0, rel) }, cancelled: { rep.cancelled })
-                continue
-            }
-            while true {
-                try rep.checkCancel()
-                let n = read(inFD, buf, chunk)
-                if n < 0 { throw errnoMessage("Read error in \(rel)") }
-                if n == 0 { break }
-                var off = 0
-                while off < n {
-                    let w = write(outFD, buf + off, n - off)
-                    if w < 0 { throw errnoMessage("Write error in \(rel)") }
-                    off += w
-                }
-                advance(n, rel)
-            }
-        }
-        rep.progress(0.99, "Flushing...")
-        sync()
-        rep.log("Copied \(copied) bytes")
+        rep.log("Copied \(scanned.total) bytes")
+        let hasBootmgr = scanned.hasBootmgr
 
         // Windows media also needs boot code for legacy BIOS (UEFI boots from the files alone).
         if hasBootmgr && scheme == "MBR" && fs == "FAT32", let part = dataVolumePartition(drive.id) {
