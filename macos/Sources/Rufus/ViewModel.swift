@@ -114,7 +114,7 @@ final class ViewModel: ObservableObject {
         if DiskService.allowDiskImages { cmd = "RUFUS_ALLOW_DISK_IMAGES=1 " + cmd }
         let script = "do shell script \"\(cmd.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\" with administrator privileges"
 
-        running = true; writing = true; progress = 0; status = "STARTING..."
+        running = true; writing = true; outcome = .idle; progress = 0; status = "STARTING..."
         appendLog("Starting \(effectiveMode == .extract ? "ISO" : "DD") write to \(selectedDrive)")
         var finished = false, failed = false
         var offset = 0
