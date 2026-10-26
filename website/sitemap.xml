@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+  <url><loc>https://festomanolo.com/ndaga-fijo/</loc><lastmod>2026-10-26</lastmod><changefreq>monthly</changefreq><priority>1.0</priority>
+    <image:image><image:loc>https://festomanolo.com/ndaga-fijo/assets/img/setup.webp</image:loc><image:title>Ndaga Fijo setup screen</image:title></image:image>
+    <image:image><image:loc>https://festomanolo.com/ndaga-fijo/assets/img/writing.webp</image:loc><image:title>Ndaga Fijo writing progress</image:title></image:image>
+    <image:image><image:loc>https://festomanolo.com/ndaga-fijo/assets/img/done.webp</image:loc><image:title>Ndaga Fijo finished screen</image:title></image:image>
+  </url>
+  <url><loc>https://festomanolo.com/ndaga-fijo/guides/create-windows-usb-on-mac/</loc><lastmod>2026-10-26</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://festomanolo.com/ndaga-fijo/guides/install-wim-larger-than-4gb-fat32-mac/</loc><lastmod>2026-10-26</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>
+</urlset>
