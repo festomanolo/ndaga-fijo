@@ -100,6 +100,7 @@ enum Staging {
         try rep.checkCancel()
 
         // macOS leaves a few stray clusters behind when it creates and removes its bookkeeping folders;
+        // repair them here (cheap, on the SSD) so the drive that reaches the stick is clean.
         // 3. Find how much of the image is actually used.
         let fatBytes = fatSectors * bps
         var lastCluster = 1
