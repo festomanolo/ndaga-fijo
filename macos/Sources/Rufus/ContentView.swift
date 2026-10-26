@@ -385,6 +385,7 @@ struct ContentView: View {
         HStack {
             Text(title).font(.system(size: 13)).frame(width: 120, alignment: .leading)
             content()
+            Spacer(minLength: 0)
         }
     }
 }
