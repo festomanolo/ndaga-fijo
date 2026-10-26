@@ -146,11 +146,78 @@ struct ContentView: View {
                 }.frame(maxHeight: 132)
             }
         }
-        .padding(18)
-        .frame(width: 520)
-        .onAppear { vm.refreshDrives() }
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
-            guard let p = providers.first else { return false }
+        .card()
+        .animation(spring, value: vm.drives)
+    }
+
+    private func driveRow(_ d: Drive) -> some View {
+        let selected = vm.selectedDrive == d.id
+        return Button { vm.selectedDrive = d.id } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "externaldrive.fill")
+                    .font(.system(size: 20)).foregroundStyle(selected ? Color.accentColor : .secondary)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(d.name.isEmpty ? "USB Drive" : d.name).font(.system(size: 13, weight: .medium))
+                    Text("\(ByteCountFormatter.string(fromByteCount: Int64(d.size), countStyle: .file)) · \(d.id)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if selected { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor).transition(.scale.combined(with: .opacity)) }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .contentShape(Rectangle())
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(selected ? Color.accentColor.opacity(0.6) : .clear, lineWidth: 1.2))
+        }
+        .buttonStyle(PressStyle())
+        .disabled(vm.running)
+        .animation(spring, value: selected)
+    }
+
+    // MARK: Image
+
+    private var imageCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            label("Boot image")
+            Button { chooseImage() } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: vm.imageInfo == nil ? "arrow.down.doc" : "opticaldisc.fill")
+                        .font(.system(size: 22)).foregroundStyle(vm.imageInfo == nil ? .secondary : Color.accentColor)
+                        .frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(vm.imagePath.isEmpty ? "Drop an ISO or disk image here" : (vm.imagePath as NSString).lastPathComponent)
+                            .font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                        Text(vm.imageInfo?.summary ?? "or click to choose a file")
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                    Spacer()
+                    Text(vm.imageInfo == nil ? "Select" : "Change")
+                        .font(.system(size: 12, weight: .medium)).foregroundStyle(Color.accentColor)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity)
+                .contentShape(Rectangle())
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(dropTargeted ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04)))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(dropTargeted ? Color.accentColor : Color.primary.opacity(0.18),
+                                  style: StrokeStyle(lineWidth: dropTargeted ? 1.6 : 1, dash: vm.imageInfo == nil ? [5, 4] : []))
+                )
+                .scaleEffect(dropTargeted && !reduceMotion ? 1.015 : 1)
+            }
+            .buttonStyle(PressStyle()).disabled(vm.running)
+            .animation(spring, value: dropTargeted)
+            if let w = vm.modeWarning {
+                Label(w, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .card()
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            guard let p = providers.first, !vm.running else { return false }
             _ = p.loadObject(ofClass: URL.self) { url, _ in
                 if let url { DispatchQueue.main.async { vm.imagePath = url.path } }
             }
