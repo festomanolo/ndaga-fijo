@@ -68,6 +68,7 @@ final class ViewModel: ObservableObject {
     }
 
     func refreshDrives() {
+        if ProcessInfo.processInfo.environment["NDAGA_PREVIEW"] != nil { return }
         Task {
             let fixed = includeFixed
             let found = await Task.detached { DiskService.listDrives(includeFixed: fixed) }.value
