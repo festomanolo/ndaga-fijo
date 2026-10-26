@@ -1,11 +1,13 @@
-# Rufus for macOS
+<p align="center"><img src="assets/logo.png" width="128" alt="Ndaga Fijo logo"></p>
 
-A native macOS (SwiftUI) port of the Rufus workflow: pick a removable drive, pick an ISO/IMG,
+# Ndaga Fijo
+
+A native macOS (SwiftUI) bootable-USB creator, based on [Rufus](https://rufus.ie) and following its workflow: pick a removable drive, pick an ISO/IMG,
 choose the format options, and write. The Windows sources in `../src` are untouched.
 
 ## Build and run
 
-    ./build-app.sh && open build/Rufus.app
+    ./build-app.sh && open build/NdagaFijo.app
 
 Requires Xcode command line tools (Swift 5.9+), macOS 13+.
 
@@ -23,7 +25,7 @@ Requires Xcode command line tools (Swift 5.9+), macOS 13+.
   transfers on the raw device. Writes show a live MB/s figure. Verify reads back at full speed instead of re-decoding.
 * Not yet verified: booting on real hardware (UEFI and BIOS), the admin-prompt path end to end, and writes to real USB drives.
 * Writing needs root: the app asks for your password once per job (standard macOS prompt) and runs only its
-  own small helper mode (`Rufus --helper`) as root.
+  own small helper mode (`NdagaFijo --helper`) as root.
 * Checksums: MD5, SHA-1, SHA-256, SHA-512.
 
 ## Not ported (Windows-only or not feasible)
@@ -34,9 +36,13 @@ compressed image support, localization.
 
 ## Testing safely
 
-Set `RUFUS_ALLOW_DISK_IMAGES=1` to also list `hdiutil attach -nomount` disk images, and test against those:
+Set `NDAGA_ALLOW_DISK_IMAGES=1` to also list `hdiutil attach -nomount` disk images, and test against those:
 
     hdiutil create -size 64m -layout NONE test.dmg && hdiutil attach -nomount test.dmg
-    RUFUS_ALLOW_DISK_IMAGES=1 open build/Rufus.app
+    NDAGA_ALLOW_DISK_IMAGES=1 open build/NdagaFijo.app
 
-Licensed under GPL v3 or later, like Rufus.
+## Credits and license
+
+Ndaga Fijo is a derivative work of [Rufus](https://github.com/pbatard/rufus) by Pete Batard and contributors, and of
+ms-sys (boot code in `Sources/NdagaFijo/BootCode.swift`). It is licensed under the GNU GPL v3 or later, see
+`../LICENSE.txt`. "Rufus" is the name of the original project; Ndaga Fijo is not affiliated with or endorsed by it.
