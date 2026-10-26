@@ -381,7 +381,7 @@ struct ContentView: View {
         Text(s.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.6).foregroundStyle(.secondary)
     }
 
-    private func row<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
+    private func optionRow<C: View>(_ title: String, @ViewBuilder _ content: () -> C) -> some View {
         HStack {
             Text(title).frame(width: 120, alignment: .leading)
             content()
