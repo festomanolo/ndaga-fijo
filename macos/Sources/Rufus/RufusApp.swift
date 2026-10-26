@@ -10,6 +10,7 @@ struct RufusApp: App {
         WindowGroup("Rufus") {
             ContentView()
         }
+        .windowStyle(.hiddenTitleBar)
         .windowResizability(.contentSize)
     }
 }
