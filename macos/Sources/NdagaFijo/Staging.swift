@@ -69,3 +69,74 @@ enum Staging {
         let att = Shell.plist("/usr/bin/hdiutil", ["attach", "-imagekey", "diskimage-class=CRawDiskImage",
                                                      "-nobrowse", "-noverify", "-plist", stagePath])
         guard let ents = att?["system-entities"] as? [[String: Any]] else { throw Failure(message: "Cannot attach the staging image") }
+        var mp = ents.compactMap { $0["mount-point"] as? String }.first
+        let devNode = ents.compactMap { $0["dev-entry"] as? String }.first
+        if mp == nil, let devNode {
+            _ = Shell.diskutil(["mount", devNode])
+            mp = Shell.diskutilPlist(["info", "-plist", devNode])?["MountPoint"] as? String
+        }
+        guard let mountPoint = mp else { throw Failure(message: "Cannot mount the staging image") }
+        mount = mountPoint
+        FileManager.default.createFile(atPath: mountPoint + "/.metadata_never_index", contents: Data())
+
+        let started = Date()
+        try TreeCopy.copy(scan, dest: mountPoint, splitLargeWim: true, threads: threads, rep: rep,
+                          progress: { done, name in
+            rep.progress(0.08 + 0.27 * Double(done) / Double(max(scan.total, 1)), "Preparing \(name)")
+        })
+        rep.log(String(format: "Prepared %@ in %.0fs", ByteCountFormatter.string(fromByteCount: Int64(scan.total), countStyle: .file),
+                       Date().timeIntervalSince(started)))
+        for junk in [".fseventsd", ".Spotlight-V100", ".Trashes", ".TemporaryItems", ".metadata_never_index"] {
+            try? FileManager.default.removeItem(atPath: mountPoint + "/" + junk)
+        }
+        _ = Shell.run("/bin/sync", [])
+        var detached = false
+        for _ in 0..<5 {
+            if Shell.run("/usr/bin/hdiutil", ["detach", mountPoint]).status == 0 { detached = true; break }
+            Thread.sleep(forTimeInterval: 1)
+        }
+        if !detached { _ = Shell.run("/usr/bin/hdiutil", ["detach", "-force", mountPoint]) }
+        mount = nil
+        try rep.checkCancel()
+
+        // 3. Find how much of the image is actually used.
+        let fatBytes = fatSectors * bps
+        var lastCluster = 1
+        var offset = fatBytes
+        var chunk = [UInt8](repeating: 0, count: 1 << 20)
+        scan: while offset > 0 {
+            let len = min(chunk.count, offset)
+            offset -= len
+            guard pread(sfd, &chunk, len, off_t(fatStart + offset)) == len else { throw Failure(message: "Cannot read the FAT") }
+            var i = len - 4
+            while i >= 0 {
+                if (chunk[i] | chunk[i + 1] | chunk[i + 2] | chunk[i + 3 ]) != 0 { lastCluster = (offset + i) / 4; break scan }
+                i -= 4
+            }
+        }
+        let usedEnd = lastCluster >= 2 ? dataStart + (lastCluster - 1) * clusterBytes : headBytes
+        let streamBytes = UInt64(min(usedEnd, totalSectors * bps))
+
+        // 4. One sequential pass to the stick.
+        try rep.checkCancel()
+        let out = open(dev, O_WRONLY)
+        guard out >= 0 else { throw Failure(message: "Cannot open \(dev) for writing: \(String(cString: strerror(errno)))") }
+        defer { close(out) }
+        _ = fcntl(out, F_NOCACHE, 1)
+        var written: UInt64 = 0
+        let t0 = Date()
+        rep.progress(0.35, "Writing to the drive...")
+        try FastIO.copy(from: sfd, srcOffset: 0, to: out, length: streamBytes, bufferSize: 8 << 20, depth: 4, padTo: 512,
+                        onBytes: { n in
+            written += UInt64(n)
+            let secs = max(Date().timeIntervalSince(t0), 0.001)
+            let rate = Double(written) / secs
+            rep.progress(0.35 + 0.64 * Double(written) / Double(streamBytes),
+                         String(format: "Writing to the drive... %.0f MB/s", rate / 1_000_000))
+            if secs > 3 { rep.eta(Double(streamBytes - written) / rate) }
+        }, cancelled: { rep.cancelled })
+        fsync(out)
+        rep.log(String(format: "Streamed %@ to the drive in %.0fs", ByteCountFormatter.string(fromByteCount: Int64(streamBytes), countStyle: .file),
+                       Date().timeIntervalSince(t0)))
+    }
+}
