@@ -98,31 +98,14 @@ enum Helper {
 
         let span = verify ? 0.5 : 1.0
         var written: UInt64 = 0
-        while true {
-            try rep.checkCancel()
-            var got = 0
-            while got < bs {
-                let n = read(src, buf + got, bs - got)
-                if n < 0 { throw errnoMessage("Read error") }
-                if n == 0 { break }
-                got += n
-            }
-            if got == 0 { break }
-            var len = got
-            if len % 512 != 0 {                       // raw devices need whole sectors
-                let padded = (len + 511) & ~511
-                memset(buf + len, 0, padded - len)
-                len = padded
-            }
-            var off = 0
-            while off < len {
-                let n = write(dst, buf + off, len - off)
-                if n < 0 { throw errnoMessage("Write error at offset \(written)") }
-                off += n
-            }
-            written += UInt64(got)
-            rep.progress(span * Double(written) / Double(size), "Writing image...")
-        }
+        let started = Date()
+        try FastIO.copy(from: src, srcOffset: 0, to: dst, length: size, bufferSize: 8 << 20, depth: 4, padTo: 512,
+                        onBytes: { n in
+                            written += UInt64(n)
+                            let rate = Double(written) / max(Date().timeIntervalSince(started), 0.001) / 1_000_000
+                            rep.progress(span * Double(written) / Double(size), String(format: "Writing image... %.0f MB/s", rate))
+                        },
+                        cancelled: { rep.cancelled })
         fsync(dst)
         rep.log("Wrote \(written) bytes")
 
