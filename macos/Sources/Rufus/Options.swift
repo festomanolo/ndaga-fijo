@@ -8,8 +8,8 @@ import Foundation
 enum PartitionScheme: String, CaseIterable, Identifiable {
     case mbr = "MBR", gpt = "GPT"
     var id: String { rawValue }
-    /// Extracted drives only carry /EFI/BOOT files; diskutil installs no MBR/PBR boot code.
-    var target: String { "UEFI (non-CSM)" }
+    /// MBR + FAT32 Windows media also gets BIOS boot code; everything else extracted is UEFI only.
+    var target: String { self == .mbr ? "BIOS or UEFI (Windows media)" : "UEFI (non-CSM)" }
 }
 
 enum FileSystemChoice: String, CaseIterable, Identifiable {

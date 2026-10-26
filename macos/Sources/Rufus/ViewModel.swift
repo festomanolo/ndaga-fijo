@@ -41,9 +41,6 @@ final class ViewModel: ObservableObject {
             return "This ISO is not hybrid; writing it in DD mode will not produce a bootable drive."
         }
         if effectiveMode == .extract && !info.isOptical { return "Only ISO images can be extracted." }
-        if effectiveMode == .extract && fileSystem == .fat32 && info.size > 4_000_000_000 {
-            return "Windows ISOs whose install.wim exceeds 4 GB cannot be written to FAT32 yet (ExFAT works for copying, but most UEFI firmware cannot boot it)."
-        }
         return nil
     }
 
