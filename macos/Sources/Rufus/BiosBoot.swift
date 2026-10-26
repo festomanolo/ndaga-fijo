@@ -74,6 +74,6 @@ enum BiosBoot {
             _ = Shell.diskutil(["mountDisk", disk])
             if Helper.dataVolumeMountPoint(disk) != nil { return }
             Thread.sleep(forTimeInterval: 1)
-        _ = Shell.diskutil(["mountDisk", disk])
+        }
     }
 }
