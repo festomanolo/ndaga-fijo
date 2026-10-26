@@ -22,6 +22,7 @@ final class Reporter {
     private func emit(_ s: String) { try? fh?.write(contentsOf: Data((s + "\n").utf8)) }
     func progress(_ f: Double, _ msg: String) { emit("P \(min(max(f, 0), 1)) \(msg)") }
     func log(_ s: String) { emit("L \(s)") }
+    func eta(_ seconds: Double) { emit("E \(Int(seconds))") }
     func done() { emit("DONE") }
     func fail(_ s: String) { emit("ERR \(s)") }
     var cancelled: Bool { FileManager.default.fileExists(atPath: cancelPath) }
@@ -67,6 +68,8 @@ enum Helper {
         } catch let e as WimSplit.Failure {
             rep.fail(e.message); return 1
         } catch let e as BiosBoot.Failure {
+            rep.fail(e.message); return 1
+        } catch let e as Staging.Failure {
             rep.fail(e.message); return 1
         } catch {
             rep.fail(error.localizedDescription); return 1
@@ -176,29 +179,14 @@ enum Helper {
 
         // Scan before erasing anything, so impossible jobs fail while the drive is still intact.
         rep.progress(0.03, "Scanning image...")
-        var total: UInt64 = 0
-        var tooBig: [String] = []
-        let fm = FileManager.default
-        let limit: UInt64 = 0xFFFF_FFFF
-        let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey, .isRegularFileKey]
-        guard let scan = fm.enumerator(at: srcRoot, includingPropertiesForKeys: keys, options: []) else {
-            throw HelperError(message: "Cannot read image contents")
-        }
-        for case let u as URL in scan {
-            let v = try? u.resourceValues(forKeys: Set(keys))
-            guard v?.isRegularFile == true else { continue }
-            let sz = UInt64(v?.fileSize ?? 0)
-            total += sz
-            if fs == "FAT32" && sz > limit {
-                let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
-                if rel.lowercased() != "sources/install.wim" { tooBig.append(rel) }     // install.wim is split below
-            }
-            try rep.checkCancel()
-        }
+        let scanned = try TreeCopy.scan(srcRoot, rep: rep)
+        let tooBig = scanned.files.filter {
+            fs == "FAT32" && $0.size > TreeCopy.fat32Limit && $0.rel.lowercased() != "sources/install.wim"      // install.wim is split
+        }.map { $0.rel }
         if !tooBig.isEmpty {
             throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). The drive was not modified.")
         }
-        if total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
+        if scanned.total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
 
         let vol = sanitizeLabel(label, fs: fs)
         rep.progress(0.05, "Formatting as \(fs) (\(scheme))...")
@@ -206,73 +194,26 @@ enum Helper {
         rep.log(er.text.trimmingCharacters(in: .whitespacesAndNewlines))
         if er.status != 0 { throw HelperError(message: "Format failed") }
 
-        guard let dest = dataVolumeMountPoint(drive.id) else { throw HelperError(message: "Cannot find the new volume") }
-        rep.log("Copying to \(dest)")
-
-        var copied: UInt64 = 0
-        guard let walk = fm.enumerator(at: srcRoot, includingPropertiesForKeys: keys, options: []) else {
-            throw HelperError(message: "Cannot read image contents")
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        let threads = Int(ProcessInfo.processInfo.environment["NDAGA_THREADS"] ?? "") ?? max(2, min(8, cores))
+        var staged = false
+        if fs == "FAT32", !Staging.disabled, Staging.hasRoom(for: scanned.total), let part = dataVolumePartition(drive.id) {
+            rep.log("Using the fast path: parallel staging (\(threads) threads), then one sequential write")
+            _ = Shell.diskutil(["unmountDisk", drive.id])
+            try Staging.writeFAT32(scan: scanned, drive: drive, partition: part, label: vol, threads: threads, rep: rep)
+            staged = true
         }
-        let chunk = 1 << 20
-        let buf = UnsafeMutableRawPointer.allocate(byteCount: chunk, alignment: 4096)
-        defer { buf.deallocate() }
-        func advance(_ n: Int, _ rel: String) {
-            copied += UInt64(n)
-            rep.progress(0.1 + 0.88 * Double(copied) / Double(max(total, 1)), "Copying \(rel)")
+        if !staged {
+            guard let dest = dataVolumeMountPoint(drive.id) else { throw HelperError(message: "Cannot find the new volume") }
+            rep.log("Copying to \(dest)")
+            try TreeCopy.copy(scanned, dest: dest, splitLargeWim: fs == "FAT32", threads: 1, rep: rep, progress: { done, name in
+                rep.progress(0.1 + 0.88 * Double(done) / Double(max(scanned.total, 1)), "Copying \(name)")
+            })
+            rep.progress(0.99, "Flushing...")
+            sync()
         }
-        var hasBootmgr = false
-        for case let u as URL in walk {
-            try rep.checkCancel()
-            let rel = String(u.path.dropFirst(srcRoot.path.count + 1))
-            let target = (dest as NSString).appendingPathComponent(rel)
-            let v = try? u.resourceValues(forKeys: Set(keys))
-            if v?.isDirectory == true {
-                try fm.createDirectory(atPath: target, withIntermediateDirectories: true)
-                continue
-            }
-            guard v?.isRegularFile == true else { continue }      // FAT/exFAT have no symlinks
-            let size = UInt64(v?.fileSize ?? 0)
-            if rel.lowercased() == "bootmgr" { hasBootmgr = true }
-
-            if fs == "FAT32" && size > limit && rel.lowercased() == "sources/install.wim" {
-                rep.log("Splitting install.wim (\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))) to fit FAT32")
-                let parts = try WimSplit.split(source: u.path,
-                                               destDir: (target as NSString).deletingLastPathComponent,
-                                               maxPart: 4000 << 20,
-                                               onBytes: { advance($0, "install.swm") },
-                                               cancelled: { rep.cancelled })
-                rep.log("Wrote \(parts.count) parts")
-                continue
-            }
-
-            let inFD = open(u.path, O_RDONLY)
-            guard inFD >= 0 else { throw errnoMessage("Cannot read \(rel)") }
-            let outFD = open(target, O_WRONLY | O_CREAT | O_TRUNC, 0o644)
-            guard outFD >= 0 else { close(inFD); throw errnoMessage("Cannot create \(rel)") }
-            defer { close(inFD); close(outFD) }
-            if size >= 16 << 20 {                                  // large file: overlap read and write
-                _ = fcntl(outFD, F_NOCACHE, 1)
-                try FastIO.copy(from: inFD, srcOffset: 0, to: outFD, length: size,
-                                onBytes: { advance($0, rel) }, cancelled: { rep.cancelled })
-                continue
-            }
-            while true {
-                try rep.checkCancel()
-                let n = read(inFD, buf, chunk)
-                if n < 0 { throw errnoMessage("Read error in \(rel)") }
-                if n == 0 { break }
-                var off = 0
-                while off < n {
-                    let w = write(outFD, buf + off, n - off)
-                    if w < 0 { throw errnoMessage("Write error in \(rel)") }
-                    off += w
-                }
-                advance(n, rel)
-            }
-        }
-        rep.progress(0.99, "Flushing...")
-        sync()
-        rep.log("Copied \(copied) bytes")
+        rep.log("Copied \(scanned.total) bytes")
+        let hasBootmgr = scanned.hasBootmgr
 
         // Windows media also needs boot code for legacy BIOS (UEFI boots from the files alone).
         if hasBootmgr && scheme == "MBR" && fs == "FAT32", let part = dataVolumePartition(drive.id) {

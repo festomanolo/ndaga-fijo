@@ -29,6 +29,7 @@ final class ViewModel: ObservableObject {
     @Published var errorMessage = ""
     @Published var speed = ""
     @Published var elapsed: TimeInterval = 0
+    @Published var etaSeconds: TimeInterval?
     private var startedAt: Date?
     enum Outcome { case idle, success, failure }
 
@@ -105,8 +106,8 @@ final class ViewModel: ObservableObject {
 
     /// Time left, extrapolated from the average pace so far. Nil until there's enough to go on.
     var remaining: TimeInterval? {
-        guard writing, progress > 0.04, elapsed > 3 else { return nil }
-        return elapsed * (1 - progress) / progress
+        guard writing else { return nil }
+        return etaSeconds          // reported by the helper from the measured write rate
     }
 
     func eject() {
@@ -142,7 +143,7 @@ final class ViewModel: ObservableObject {
         if DiskService.allowDiskImages { cmd = "NDAGA_ALLOW_DISK_IMAGES=1 " + cmd }
         let script = "do shell script \"\(cmd.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\" with administrator privileges"
 
-        startedAt = Date(); elapsed = 0
+        startedAt = Date(); elapsed = 0; etaSeconds = nil
         running = true; writing = true; outcome = .idle; errorMessage = ""; speed = ""; progress = 0; status = "Starting…"
         appendLog("Starting \(effectiveMode == .extract ? "ISO" : "DD") write to \(selectedDrive)")
         var finished = false, failed = false
@@ -192,6 +193,7 @@ final class ViewModel: ObservableObject {
                     } else { status = text }
                 }
             } else if line.hasPrefix("L ") { appendLog(String(line.dropFirst(2))) }
+            else if line.hasPrefix("E ") { etaSeconds = Double(line.dropFirst(2)) }
             else if line == "DONE" { finished = true }
             else if line.hasPrefix("ERR ") { failed = true; errorMessage = String(line.dropFirst(4)); appendLog("ERROR: " + line.dropFirst(4)); status = "FAILED" }
         }
