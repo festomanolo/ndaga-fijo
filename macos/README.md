@@ -25,7 +25,7 @@ Requires Xcode command line tools (Swift 5.9+), macOS 13+, and Rust (with the `a
 * **Drives:** only whole removable physical disks are listed (fixed external drives need "List USB hard drives"); disks backing the running system, including the APFS physical store, are always refused.
   The privileged helper re-checks this before touching anything.
 * **DD mode** (hybrid ISOs and raw images): block-for-block write to `/dev/rdiskN`, optional read-back verify.
-* **ISO mode** (plain ISOs): drive is erased as MBR or GPT with FAT32 or ExFAT, then the ISO contents are copied.
+* **ISO mode** (plain ISOs): drive is erased as MBR or GPT with FAT32, ExFAT or NTFS, then the ISO contents are copied.
   Windows ISOs work: an `install.wim` over 4 GB is split into `install.swm`, `install2.swm`... (compressed data is copied
   untouched, only headers are rewritten), which Windows Setup reads natively. With MBR + FAT32 and a `bootmgr` on the image,
   the Windows 7 MBR and FAT32 NT boot record (from `src/ms-sys`) are installed so legacy BIOS can boot too. Other extracted
