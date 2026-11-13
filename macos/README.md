@@ -56,7 +56,7 @@ Requires Xcode command line tools (Swift 5.9+), macOS 13+, and Rust (with the `a
 
 ## Not ported (Windows-only or not feasible)
 
-Windows To Go, Windows install customization (OOBE/TPM bypass), NTFS/ReFS/UDF formatting, UEFI:NTFS, syslinux BIOS boot for non-hybrid Linux ISOs,
+Windows To Go, Windows install customization (OOBE/TPM bypass), ReFS/UDF formatting, syslinux BIOS boot for non-hybrid Linux ISOs,
 bad-block checks, FreeDOS/MS-DOS, VHD/FFU images, persistent Linux partitions, Microsoft ISO downloader,
 compressed image support, localization.
 
