@@ -72,6 +72,8 @@ enum Helper {
             rep.fail(e.message); return 1
         } catch let e as Staging.Failure {
             rep.fail(e.message); return 1
+        } catch let e as NtfsMedia.Failure {
+            rep.fail(e.message); return 1
         } catch {
             rep.fail(error.localizedDescription); return 1
         }
@@ -164,8 +166,9 @@ enum Helper {
         return t.isEmpty ? "NDAGAFIJO" : t
     }
 
-    static func extract(image: String, drive: Drive, scheme: String, fs: String, label: String, rep: Reporter) throws {
-        guard ["MBR", "GPT"].contains(scheme), ["FAT32", "ExFAT"].contains(fs) else {
+    static func extract(image: String, drive: Drive, scheme: String, fs requestedFS: String, label: String, rep: Reporter) throws {
+        var fs = requestedFS
+        guard ["MBR", "GPT"].contains(scheme), ["FAT32", "ExFAT", "NTFS"].contains(fs) else {
             throw HelperError(message: "Unsupported scheme/file system")
         }
         try unmount(drive, rep)
@@ -186,9 +189,21 @@ enum Helper {
             fs == "FAT32" && $0.size > TreeCopy.fat32Limit && $0.rel.lowercased() != "sources/install.wim"      // install.wim is split
         }.map { $0.rel }
         if !tooBig.isEmpty {
-            throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). The drive was not modified.")
+            // As Rufus does: media with files FAT32 cannot hold gets NTFS (plus UEFI:NTFS so UEFI still boots).
+            guard NtfsMedia.missingTools.isEmpty else {
+                throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))) and this build has no NTFS support. The drive was not modified.")
+            }
+            rep.log("FAT32 cannot hold \(tooBig.joined(separator: ", ")) (over 4 GB), using NTFS instead")
+            fs = "NTFS"
         }
         if scanned.total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
+
+        if fs == "NTFS" {
+            try NtfsMedia.write(scan: scanned, source: srcRoot, drive: drive, gpt: scheme == "GPT",
+                                label: sanitizeLabel(label, fs: fs), rep: rep)
+            rep.log("Copied \(scanned.total) bytes")
+            return
+        }
 
         let vol = sanitizeLabel(label, fs: fs)
         rep.progress(0.05, "Formatting as \(fs) (\(scheme))...")

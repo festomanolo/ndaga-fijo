@@ -17,18 +17,29 @@ Website: https://festomanolo.com/ndaga-fijo/ · Install: `pip install ndaga-fijo
 
     ./build-app.sh && open build/NdagaFijo.app
 
-Requires Xcode command line tools (Swift 5.9+), macOS 13+.
+Requires Xcode command line tools (Swift 5.9+), macOS 13+, and Rust (with the `aarch64-apple-darwin` and
+`x86_64-apple-darwin` targets) for the NTFS tools; the first build downloads ntfs-3g once (cached in `ntfs/.cache`).
 
 ## How it works
 
 * **Drives:** only whole removable physical disks are listed (fixed external drives need "List USB hard drives"); disks backing the running system, including the APFS physical store, are always refused.
   The privileged helper re-checks this before touching anything.
 * **DD mode** (hybrid ISOs and raw images): block-for-block write to `/dev/rdiskN`, optional read-back verify.
-* **ISO mode** (plain ISOs): drive is erased as MBR or GPT with FAT32 or ExFAT, then the ISO contents are copied.
+* **ISO mode** (plain ISOs): drive is erased as MBR or GPT with FAT32, ExFAT or NTFS, then the ISO contents are copied.
   Windows ISOs work: an `install.wim` over 4 GB is split into `install.swm`, `install2.swm`... (compressed data is copied
   untouched, only headers are rewritten), which Windows Setup reads natively. With MBR + FAT32 and a `bootmgr` on the image,
   the Windows 7 MBR and FAT32 NT boot record (from `src/ms-sys`) are installed so legacy BIOS can boot too. Other extracted
   ISOs boot via UEFI only.
+* **NTFS** (chosen in the menu, or picked automatically, as Rufus does, when the image has a file FAT32 cannot hold,
+  such as a Windows `install.esd` over 4 GB): macOS can neither create nor write NTFS, so Ndaga Fijo brings its own tools.
+  `mkntfs` (from [ntfs-3g](https://github.com/tuxera/ntfs-3g), built by `ntfs/build.sh` from the checksummed release)
+  formats a sparse image on the Mac, `ndaga-ntfs` copies the files into it with the NTFS driver from
+  [VOLUMA](https://github.com/festomanolo/voluma) (vendored in `ntfs/vendor`), and only the clusters in use are then
+  streamed to the drive. The drive gets Rufus' layout: the NTFS partition, plus a 1 MB **UEFI:NTFS** partition
+  (`res/uefi/uefi-ntfs.img`, Secure Boot signed) at the end, which lets UEFI firmware boot from NTFS. On MBR the
+  Windows 7 MBR and the ms-sys NTFS boot record are installed too, for legacy BIOS. The partition table is written
+  last, so a failed job never leaves a half-made volume. If the Mac lacks room for the staging image, files are
+  written to the drive directly instead. macOS mounts the result read-only, which is normal for NTFS.
 * **Speed:** copying thousands of files through the macOS FAT driver onto a USB stick is dominated by slow per-file
   metadata writes (34 min for the 6,959-file Windows XP ISO in our test, against 67 s for a raw write of the same bytes).
   For FAT32, Ndaga Fijo formats the stick, clones its FAT geometry into a sparse image on the Mac's SSD, copies the files
@@ -45,7 +56,7 @@ Requires Xcode command line tools (Swift 5.9+), macOS 13+.
 
 ## Not ported (Windows-only or not feasible)
 
-Windows To Go, Windows install customization (OOBE/TPM bypass), NTFS/ReFS/UDF formatting, UEFI:NTFS, syslinux BIOS boot for non-hybrid Linux ISOs,
+Windows To Go, Windows install customization (OOBE/TPM bypass), ReFS/UDF formatting, syslinux BIOS boot for non-hybrid Linux ISOs,
 bad-block checks, FreeDOS/MS-DOS, VHD/FFU images, persistent Linux partitions, Microsoft ISO downloader,
 compressed image support, localization.
 
@@ -59,5 +70,7 @@ Set `NDAGA_ALLOW_DISK_IMAGES=1` to also list `hdiutil attach -nomount` disk imag
 ## Credits and license
 
 Ndaga Fijo is a derivative work of [Rufus](https://github.com/pbatard/rufus) by Pete Batard and contributors, and of
-ms-sys (boot code in `Sources/NdagaFijo/BootCode.swift`). It is licensed under the GNU GPL v3 or later, see
+ms-sys (boot code in `Sources/NdagaFijo/BootCode.swift`). The app bundles `mkntfs` from ntfs-3g (GPL v2 or later,
+source: https://tuxera.com/opensource/ntfs-3g_ntfsprogs-2022.10.3.tgz), the UEFI:NTFS image from Rufus
+(see `../res/uefi/readme.txt`) and VOLUMA's MIT-licensed NTFS driver (`ntfs/vendor`). It is licensed under the GNU GPL v3 or later, see
 `../LICENSE.txt`. "Rufus" is the name of the original project; Ndaga Fijo is not affiliated with or endorsed by it.

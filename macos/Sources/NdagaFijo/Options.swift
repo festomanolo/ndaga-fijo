@@ -8,12 +8,12 @@ import Foundation
 enum PartitionScheme: String, CaseIterable, Identifiable {
     case mbr = "MBR", gpt = "GPT"
     var id: String { rawValue }
-    /// MBR + FAT32 Windows media also gets BIOS boot code; everything else extracted is UEFI only.
+    /// MBR + FAT32 or NTFS Windows media also gets BIOS boot code; everything else extracted is UEFI only.
     var target: String { self == .mbr ? "BIOS or UEFI (Windows media)" : "UEFI (non-CSM)" }
 }
 
 enum FileSystemChoice: String, CaseIterable, Identifiable {
-    case fat32 = "FAT32", exfat = "ExFAT"
+    case fat32 = "FAT32", exfat = "ExFAT", ntfs = "NTFS"
     var id: String { rawValue }
 }
 
