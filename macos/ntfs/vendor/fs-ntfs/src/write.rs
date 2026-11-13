@@ -888,3 +888,448 @@ impl NtfsFs {
     /// Test hook: walks a directory's whole index and checks strict ordering and a consistent structure.
     pub fn verify_dir_index(&self, path: &str) -> Result<usize> {
         let d = self.walk_dir(&normalize_path(path)?)?;
+        let keys = self.dir_keys(&d)?;
+        let mut prev: Option<Vec<u16>> = None;
+        for (_, k) in &keys {
+            let u = key_units(k);
+            if let Some(p) = &prev { if self.cmp_units(p, &u) != Ordering::Less { return Err(FsError::Corrupt("index keys out of order")); } }
+            prev = Some(u);
+        }
+        Ok(keys.len())
+    }
+
+    #[doc(hidden)]
+    /// Test hook: simulates a crashed writer by raising the volume dirty bit.
+    pub fn debug_set_volume_dirty(&self) -> Result<()> { self.set_dirty(true) }
+
+    #[doc(hidden)]
+    /// Test hook: byte offset of the first `$LogFile` cluster (so tests can fake an unclean log).
+    pub fn debug_logfile_offset(&self) -> Result<u64> {
+        let f = self.load_file(2)?;
+        let nr = f.attr(T_DATA, "").and_then(|a| a.nr.as_ref()).ok_or(FsError::Corrupt("$LogFile resident"))?;
+        Ok(nr.runs.first().and_then(|r| r.lcn).ok_or(FsError::Corrupt("$LogFile sparse"))? * self.cs)
+    }
+
+    #[doc(hidden)]
+    pub fn dump_index(&self, path: &str) -> Result<String> {
+        let d = self.walk_dir(&normalize_path(path)?)?;
+        let c = self.dir_ctx(d.num)?;
+        let mut out = String::new();
+        let mut todo = vec![Loc::Root];
+        while let Some(loc) = todo.pop() {
+            let ents = self.read_node_w(&c, loc)?;
+            out += &format!("{loc:?}: ");
+            for e in &ents {
+                let n = String::from_utf16_lossy(&key_units(&e.key));
+                let short = if n.len() > 4 { n[n.len().saturating_sub(8)..].to_string() } else { n };
+                out += &format!("[{}{}{}] ", short, if e.last { "END" } else { "" }, e.child.map(|c| format!("->{c}")).unwrap_or_default());
+                if let Some(ch) = e.child { todo.push(Loc::Block(ch)); }
+            }
+            out += "\n";
+        }
+        Ok(out)
+    }
+
+    // ================================================================ file-level helpers
+    fn name_units(&self, name: &str) -> Result<Vec<u16>> {
+        validate_fat_name(name)?;
+        Ok(utf16(name))
+    }
+
+    fn split_parent<'a>(&self, path: &'a str) -> Result<(Vec<&'a str>, &'a str)> {
+        let comps = normalize_path(path)?;
+        let (last, parents) = comps.split_last().ok_or(FsError::InvalidName("root".into()))?;
+        Ok((parents.to_vec(), last))
+    }
+
+    /// (STANDARD_INFORMATION tail, descriptor bytes to copy) inherited from the parent. The descriptor is
+    /// always copied by value: sharing a non-resident attribute's runs would make two files own the same clusters.
+    fn security_for_child(&self, parent_attrs: &[RawAttr], parent: &File) -> Result<(Vec<u8>, Option<Vec<u8>>)> {
+        let si = parent_attrs.iter().find(|a| a.ty == T_STDINFO).and_then(attr_value);
+        match si {
+            Some(v) if v.len() >= 72 => Ok((v[32..72].to_vec(), None)),
+            _ => {
+                let sd = match parent.attr(0x50, "") {
+                    Some(a) => {
+                        if a.data_size() > 1 << 16 { return Err(FsError::Unsupported("parent security descriptor too large to inherit")); }
+                        Some(self.read_all(a, 1 << 16)?)
+                    }
+                    None => None,
+                };
+                Ok((vec![0u8; 16], sd))
+            }
+        }
+    }
+
+    /// Returns the record plus any clusters allocated for its security descriptor (caller frees them on failure).
+    fn build_new_record(&self, num: u64, seq: u16, parent: &Rec, parent_attrs: &[RawAttr], parent_file: &File, units: &[u16], dir: bool,
+                        data: Option<RawAttr>, size: u64, alloc: u64) -> Result<(Rec, Vec<Run>)> {
+        let mut sd_runs: Vec<Run> = Vec::new();
+        let r = self.build_new_record_inner(num, seq, parent, parent_attrs, parent_file, units, dir, data, size, alloc, &mut sd_runs);
+        match r { Ok(rec) => Ok((rec, sd_runs)), Err(e) => { self.free_clusters(&sd_runs).ok(); Err(e) } }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn build_new_record_inner(&self, num: u64, seq: u16, parent: &Rec, parent_attrs: &[RawAttr], parent_file: &File, units: &[u16], dir: bool,
+                        data: Option<RawAttr>, size: u64, alloc: u64, sd_runs: &mut Vec<Run>) -> Result<Rec> {
+        let mut r = self.fresh_record(num, seq, dir);
+        let now = now_ft();
+        let (tail, sd) = self.security_for_child(parent_attrs, parent_file)?;
+        let fflags: u32 = 0x20; // ARCHIVE, as ntfs-3g
+        let mut si = vec![0u8; 32 + tail.len()];
+        for i in 0..4 { put64(&mut si, i * 8, now); }
+        put32(&mut si, 32 - 0, fflags);
+        // tail layout: [0..4] flags(already) — rebuild: flags + max_ver + ver + class + owner + sec + quota + usn
+        if tail.len() == 40 { si[32..72].copy_from_slice(&tail); put32(&mut si, 32, fflags); put32(&mut si, 36, 0); put32(&mut si, 40, 0); put32(&mut si, 44, 0); put64(&mut si, 56, 0); put64(&mut si, 64, 0); }
+        else { si.truncate(48); put32(&mut si, 32, fflags); }
+        let id0 = next_attr_id(&mut r.buf);
+        let mut attrs = vec![res_attr(T_STDINFO, "", id0, 0, &si, 0)];
+        let pref = parent.num | ((le16(&parent.buf, 16) as u64) << 48);
+        let (fa, fl) = if dir { (0x1000_0000 | fflags, 0u64) } else { (fflags, 0) };
+        let _ = fl;
+        let fnv = filename_value(pref, now, alloc, size, fa, units, 1);
+        let id1 = next_attr_id(&mut r.buf);
+        attrs.push(res_attr(T_FILENAME, "", id1, 0, &fnv, 1));
+        if let Some(sd) = sd {
+            let id = next_attr_id(&mut r.buf);
+            if sd.len() <= 160 { attrs.push(res_attr(0x50, "", id, 0, &sd, 0)); }
+            else {
+                let runs = self.alloc_clusters((sd.len() as u64).div_ceil(self.cs), None)?;
+                *sd_runs = runs.clone();
+                self.write_runs(&runs, &sd)?;
+                let al = runs.iter().map(|r| r.len).sum::<u64>() * self.cs;
+                attrs.push(nonres_attr(0x50, "", id, 0, &runs, al, sd.len() as u64, sd.len() as u64, self.cs));
+            }
+        }
+        if dir {
+            let id = next_attr_id(&mut r.buf);
+            // new root header copied from the parent's index root
+            let pri = parent_attrs.iter().find(|a| a.ty == T_INDEX_ROOT).and_then(attr_value).ok_or(FsError::Corrupt("parent has no index root"))?;
+            let mut v = vec![0u8; 48];
+            v[..16].copy_from_slice(&pri[..16]);
+            put32(&mut v, 16, 16); put32(&mut v, 20, 32); put32(&mut v, 24, 32);
+            put32(&mut v, 32 + 8, 16); put16(&mut v, 32 + 12, 2);
+            attrs.push(res_attr(T_INDEX_ROOT, "$I30", id, 0, &v, 0));
+        } else if let Some(mut d) = data {
+            let id = next_attr_id(&mut r.buf); put16(&mut d.b, 14, id); d.id = id; attrs.push(d);
+        }
+        attrs.sort_by_key(|a| a.ty);
+        join(&mut r.buf, &attrs)?;
+        Ok(r)
+    }
+
+    fn entry_after(&self, num: u64, name: &str) -> Result<DirEntry> {
+        self.invalidate();
+        let f = self.load_file(num)?;
+        let dir = f.is_dir();
+        Ok(DirEntry {
+            name: name.to_string(), kind: if dir { EntryKind::Directory } else { EntryKind::File },
+            size: if dir { 0 } else { f.attr(T_DATA, "").map(|a| a.data_size()).unwrap_or(0) },
+            modified: None, created: None, hidden: false, read_only: false, inode: num,
+        })
+    }
+
+    /// Reads up to `limit` bytes from `src` (loops until full or EOF).
+    fn fill(src: &mut dyn Read, buf: &mut Vec<u8>, limit: usize) -> Result<()> {
+        let start = buf.len();
+        buf.resize(limit, 0);
+        let mut got = start;
+        while got < limit {
+            match src.read(&mut buf[got..]) { Ok(0) => break, Ok(n) => got += n, Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}, Err(e) => { buf.truncate(got); return Err(FsError::Source(e.to_string())); } }
+        }
+        buf.truncate(got);
+        Ok(())
+    }
+
+    /// Streams `first` + the rest of `src` into freshly allocated clusters. Returns (runs, size).
+    fn stream_clusters(&self, src: &mut dyn Read, first: Vec<u8>) -> Result<(Vec<Run>, u64)> {
+        let mut runs: Vec<Run> = Vec::new();
+        let (mut size, mut buf) = (0u64, first);
+        let mut res: Result<()> = Ok(());
+        loop {
+            // Every chunk but the last must be cluster-aligned: top up whatever is buffered to a full chunk.
+            res = Self::fill(src, &mut buf, CHUNK);
+            if res.is_err() || buf.is_empty() { break; }
+            let clusters = (buf.len() as u64).div_ceil(self.cs);
+            let near = runs.last().and_then(|r| r.lcn.map(|l| l + r.len));
+            let got = match self.alloc_clusters(clusters, near) { Ok(g) => g, Err(e) => { res = Err(e); break; } };
+            if let Err(e) = self.write_runs(&got, &buf) { self.free_clusters(&got).ok(); res = Err(e); break; }
+            let mut vcn = runs.last().map(|r| r.vcn + r.len).unwrap_or(0);
+            for g in got {
+                match runs.last_mut() { Some(l) if l.lcn.map(|x| x + l.len) == g.lcn => l.len += g.len, _ => runs.push(Run { vcn, len: g.len, lcn: g.lcn }) }
+                vcn += g.len;
+            }
+            size += buf.len() as u64;
+            buf = Vec::new();
+        }
+        match res { Ok(()) => Ok((runs, size)), Err(e) => { self.free_clusters(&runs).ok(); Err(e) } }
+    }
+
+    fn data_attr_for(&self, id: u16, first: &[u8], runs: &[Run], size: u64) -> RawAttr {
+        if runs.is_empty() { res_attr(T_DATA, "", id, 0, first, 0) }
+        else { let alloc = runs.iter().map(|r| r.len).sum::<u64>() * self.cs; nonres_attr(T_DATA, "", id, 0, runs, alloc, size, size, self.cs) }
+    }
+
+    // ================================================================ public operations
+    pub(crate) fn w_create_dir(&self, path: &str) -> Result<DirEntry> {
+        self.op(|| {
+            let (parents, name) = self.split_parent(path)?;
+            let units = self.name_units(name)?;
+            let pdir = self.walk_dir(&parents)?;
+            if self.find_in(&pdir, name)?.is_some() { return Err(FsError::AlreadyExists(path.into())); }
+            let parent = self.rec_load(pdir.num)?;
+            let pattrs = split(&parent.buf)?;
+            let (num, seq) = self.alloc_record()?;
+            let (rec, sd_runs) = match self.build_new_record(num, seq, &parent, &pattrs, &pdir, &units, true, None, 0, 0) {
+                Ok(r) => r, Err(e) => { self.free_record(num).ok(); return Err(e); }
+            };
+            let res = self.rec_store(&rec).and_then(|_| {
+                let key = key_of(&rec)?;
+                self.idx_insert(pdir.num, key, num | ((seq as u64) << 48))
+            });
+            if let Err(e) = res { self.free_clusters(&sd_runs).ok(); self.free_record(num).ok(); return Err(e); }
+            let mut p = self.rec_load(pdir.num)?; self.touch(&mut p, true)?; self.rec_store(&p)?;
+            self.entry_after(num, name)
+        })
+    }
+
+    pub(crate) fn w_write_file(&self, path: &str, src: &mut dyn Read, overwrite: bool) -> Result<DirEntry> {
+        self.op(|| {
+            let (parents, name) = self.split_parent(path)?;
+            let units = self.name_units(name)?;
+            let pdir = self.walk_dir(&parents)?;
+            let existing = self.find_in(&pdir, name)?;
+            if let Some((_, n)) = &existing {
+                if !overwrite { return Err(FsError::AlreadyExists(path.into())); }
+                let f = self.load_file(*n)?;
+                if f.is_dir() { return Err(FsError::IsADirectory(path.into())); }
+                self.check_simple_file(&f)?;
+            }
+            // 1. data
+            let mut first = Vec::new();
+            Self::fill(src, &mut first, self.rec_size as usize)?;
+            let small = first.len() < self.rec_size as usize;
+            let (mut runs, mut size) = (Vec::new(), first.len() as u64);
+            let mut resident_bytes = first.clone();
+            if !small || !self.resident_fits(first.len()) {
+                let (r, s) = self.stream_clusters(src, std::mem::take(&mut first))?;
+                runs = r; size = s; resident_bytes = Vec::new();
+            }
+            let alloc = runs.iter().map(|r| r.len).sum::<u64>() * self.cs;
+            let result = match existing {
+                None => self.create_file_record(&pdir, name, &units, &resident_bytes, &runs, size, alloc),
+                Some((_, n)) => self.replace_file_data(n, &resident_bytes, &runs, size, alloc),
+            };
+            match result {
+                Ok(n) => {
+                    let mut p = self.rec_load(pdir.num)?; self.touch(&mut p, true)?; self.rec_store(&p)?;
+                    self.entry_after(n, name)
+                }
+                Err(e) => { self.free_clusters(&runs).ok(); Err(e) }
+            }
+        })
+    }
+
+    fn resident_fits(&self, n: usize) -> bool {
+        // conservative: header (0x38+8) + stdinfo (0x18+72) + filename (0x18+66+2*255 max) + data attr
+        n + 0x18 + 0x60 + 0x18 + 66 + 2 * 255 + 0x40 + 16 < self.rec_size as usize
+    }
+
+    fn check_simple_file(&self, f: &File) -> Result<()> {
+        let raw = split(&self.rec_load(f.num)?.buf)?;
+        if raw.iter().any(|a| a.ty == T_ATTRLIST) { return Err(FsError::Unsupported("file with an attribute list")); }
+        if le16(&self.rec_load(f.num)?.buf, 18) != 1 { return Err(FsError::Unsupported("file with hard links")); }
+        for a in &f.attrs {
+            if a.ty == T_DATA && a.flags & 0xC001 != 0 { return Err(FsError::Unsupported("compressed, encrypted or sparse file")); }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn create_file_record(&self, pdir: &File, name: &str, units: &[u16], first: &[u8], runs: &[Run], size: u64, alloc: u64) -> Result<u64> {
+        let parent = self.rec_load(pdir.num)?;
+        let pattrs = split(&parent.buf)?;
+        let (num, seq) = self.alloc_record()?;
+        let mut tmp = self.fresh_record(num, seq, false);
+        let id = le16(&tmp.buf, 40) + 2; // ids 0,1 go to STDINFO/FILENAME; DATA gets a later one
+        let _ = &mut tmp;
+        let data = self.data_attr_for(id, first, runs, size);
+        let (rec, sd_runs) = match self.build_new_record(num, seq, &parent, &pattrs, pdir, units, false, Some(data), size, alloc) {
+            Ok(r) => r, Err(e) => { self.free_record(num).ok(); return Err(e); }
+        };
+        let res = self.rec_store(&rec).and_then(|_| self.idx_insert(pdir.num, key_of(&rec)?, num | ((seq as u64) << 48)));
+        if let Err(e) = res { self.free_clusters(&sd_runs).ok(); self.free_record(num).ok(); return Err(e); }
+        let _ = name;
+        Ok(num)
+    }
+
+    fn replace_file_data(&self, n: u64, first: &[u8], runs: &[Run], size: u64, alloc: u64) -> Result<u64> {
+        let f = self.load_file(n)?;
+        let old: Vec<Run> = f.attr(T_DATA, "").and_then(|a| a.nr.as_ref()).map(|nr| nr.runs.clone()).unwrap_or_default();
+        let mut rec = self.rec_load(n)?;
+        let mut attrs = split(&rec.buf)?;
+        let di = attrs.iter().position(|a| a.ty == T_DATA && a.name.is_empty());
+        let id = match di { Some(i) => attrs[i].id, None => next_attr_id(&mut rec.buf) };
+        let new = self.data_attr_for(id, first, runs, size);
+        match di { Some(i) => attrs[i] = new, None => attrs.push(new) }
+        let now = now_ft();
+        let mut parents: Vec<(u64, Vec<u8>, Vec<u8>)> = Vec::new();
+        for a in attrs.iter_mut() {
+            if a.ty == T_STDINFO {
+                let vo = le16(&a.b, 20) as usize;
+                put64(&mut a.b, vo + 8, now); put64(&mut a.b, vo + 16, now); put64(&mut a.b, vo + 24, now);
+            } else if a.ty == T_FILENAME {
+                let vo = le16(&a.b, 20) as usize;
+                let before = a.b[vo..vo + le32(&a.b, 16) as usize].to_vec();
+                for i in 0..4 { put64(&mut a.b, vo + 8 + i * 8, now); }
+                put64(&mut a.b, vo + 40, alloc); put64(&mut a.b, vo + 48, size);
+                let after = a.b[vo..vo + le32(&a.b, 16) as usize].to_vec();
+                parents.push((le64(&before, 0) & MFT_MASK, before, after));
+            }
+        }
+        attrs.sort_by_key(|a| a.ty);
+        join(&mut rec.buf, &attrs)?;
+        self.rec_store(&rec)?;
+        for (p, before, after) in parents {
+            let _ = before;
+            self.idx_update_key(p, &key_units(&after), after)?;
+        }
+        self.free_clusters(&old)?;
+        Ok(n)
+    }
+
+    pub(crate) fn w_remove(&self, path: &str) -> Result<()> {
+        self.op(|| {
+            let (parents, name) = self.split_parent(path)?;
+            let pdir = self.walk_dir(&parents)?;
+            let (_, n) = self.find_in(&pdir, name)?.ok_or_else(|| FsError::NotFound(path.into()))?;
+            let f = self.load_file(n)?;
+            if n < 24 { return Err(FsError::Refused("refusing to delete an NTFS system file")); }
+            if f.is_dir() {
+                if !self.list_file(&f)?.is_empty() { return Err(FsError::NotEmpty(path.into())); }
+            } else { self.check_simple_file(&f)?; }
+            if f.attrs.iter().any(|a| a.ty == T_FILENAME && a.nr.is_some()) { return Err(FsError::Corrupt("non-resident FILE_NAME")); }
+            let rec = self.rec_load(n)?;
+            let raw = split(&rec.buf)?;
+            if raw.iter().any(|a| a.ty == T_ATTRLIST) { return Err(FsError::Unsupported("file with an attribute list")); }
+            let mref_seq = le16(&rec.buf, 16);
+            // 1. unlink from every parent index
+            for a in raw.iter().filter(|a| a.ty == T_FILENAME) {
+                let v = attr_value(a).ok_or(FsError::Corrupt("non-resident FILE_NAME"))?;
+                self.idx_remove(le64(v, 0) & MFT_MASK, &key_units(v), n | ((mref_seq as u64) << 48))?;
+            }
+            // 2. free clusters and the record
+            let mut all: Vec<Run> = Vec::new();
+            for a in &f.attrs { if let Some(nr) = &a.nr { all.extend(nr.runs.iter().cloned()); } }
+            self.free_clusters(&all)?;
+            let mut dead = self.rec_load(n)?;
+            let fl = le16(&dead.buf, 22) & !1;
+            put16(&mut dead.buf, 22, fl);
+            put16(&mut dead.buf, 18, 0);
+            self.rec_store(&dead)?;
+            self.free_record(n)?;
+            let mut p = self.rec_load(pdir.num)?; self.touch(&mut p, true)?; self.rec_store(&p)?;
+            Ok(())
+        })
+    }
+
+    pub(crate) fn w_rename(&self, from: &str, to: &str) -> Result<()> {
+        self.op(|| {
+            let (fp, fname) = self.split_parent(from)?;
+            let (tp, tname) = self.split_parent(to)?;
+            let tunits = self.name_units(tname)?;
+            let src_dir = self.walk_dir(&fp)?;
+            let dst_dir = self.walk_dir(&tp)?;
+            let (_, n) = self.find_in(&src_dir, fname)?.ok_or_else(|| FsError::NotFound(from.into()))?;
+            if n < 24 { return Err(FsError::Refused("refusing to rename an NTFS system file")); }
+            if let Some((_, other)) = self.find_in(&dst_dir, tname)? {
+                if other != n { return Err(FsError::AlreadyExists(to.into())); }
+            }
+            let f = self.load_file(n)?;
+            if f.is_dir() {
+                // cannot move a directory into itself
+                let mut cur = dst_dir.num;
+                for _ in 0..4096 {
+                    if cur == n { return Err(FsError::InvalidName("cannot move a directory into itself".into())); }
+                    if cur == 5 { break; }
+                    let g = self.load_file(cur)?;
+                    let fnm = g.attrs.iter().find(|a| a.ty == T_FILENAME).and_then(|a| a.res.as_ref()).ok_or(FsError::Corrupt("directory without name"))?;
+                    cur = le64(fnm, 0) & MFT_MASK;
+                }
+            } else { self.check_simple_file(&f)?; }
+            let mut rec = self.rec_load(n)?;
+            let mut attrs = split(&rec.buf)?;
+            if attrs.iter().any(|a| a.ty == T_ATTRLIST) { return Err(FsError::Unsupported("file with an attribute list")); }
+            let seq = le16(&rec.buf, 16);
+            let mref = n | ((seq as u64) << 48);
+            let old_names: Vec<Vec<u8>> = attrs.iter().filter(|a| a.ty == T_FILENAME).filter_map(|a| attr_value(a).map(|v| v.to_vec())).collect();
+            let template = old_names.iter().find(|v| v[65] != 2).or(old_names.first()).cloned().ok_or(FsError::Corrupt("file has no name"))?;
+            let dparent = self.rec_load(dst_dir.num)?;
+            let pref = dst_dir.num | ((le16(&dparent.buf, 16) as u64) << 48);
+            let now = now_ft();
+            let mut key = filename_value(pref, le64(&template, 8), le64(&template, 40), le64(&template, 48), le32(&template, 56), &tunits, 1);
+            for i in 1..4 { put64(&mut key, 8 + i * 8, le64(&template, 8 + i * 8)); }
+            let _ = now;
+            // 1. unlink old names
+            let mut removed: Vec<Vec<u8>> = Vec::new();
+            for v in &old_names {
+                self.idx_remove(le64(v, 0) & MFT_MASK, &key_units(v), mref)?;
+                removed.push(v.clone());
+            }
+            // 2. relink under the new name; restore the old names if that fails
+            let relink = (|| -> Result<()> {
+                let first = attrs.iter().position(|a| a.ty == T_FILENAME).unwrap();
+                let id = attrs[first].id;
+                attrs.retain(|a| a.ty != T_FILENAME);
+                attrs.push(res_attr(T_FILENAME, "", id, 0, &key, 1));
+                attrs.sort_by_key(|a| a.ty);
+                join(&mut rec.buf, &attrs)?;
+                self.rec_store(&rec)?;
+                self.idx_insert(dst_dir.num, key.clone(), mref)
+            })();
+            if let Err(e) = relink {
+                for v in removed { self.idx_insert(le64(&v, 0) & MFT_MASK, v, mref).ok(); }
+                return Err(e);
+            }
+            let mut r = self.rec_load(n)?; self.touch(&mut r, false)?; self.rec_store(&r)?;
+            for d in [src_dir.num, dst_dir.num] { let mut p = self.rec_load(d)?; self.touch(&mut p, true)?; self.rec_store(&p)?; }
+            Ok(())
+        })
+    }
+}
+
+const ROOT_REC_W: u64 = 5;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn decode_signed(b: &[u8]) -> Vec<(i64, Option<i64>)> {
+        // an independent reader following ntfs-3g: length and offset are both signed little-endian
+        let (mut i, mut out) = (0, vec![]);
+        while b[i] != 0 {
+            let (lb, ob) = ((b[i] & 15) as usize, (b[i] >> 4) as usize); i += 1;
+            let mut len = b[i + lb - 1] as i8 as i64; for k in (0..lb - 1).rev() { len = (len << 8) + b[i + k] as i64 } i += lb;
+            let off = if ob == 0 { None } else { let mut o = b[i + ob - 1] as i8 as i64; for k in (0..ob - 1).rev() { o = (o << 8) + b[i + k] as i64 } i += ob; Some(o) };
+            out.push((len, off));
+        }
+        out
+    }
+    #[test]
+    fn run_lengths_and_offsets_round_trip_as_signed_numbers() {
+        for len in [1u64, 2, 127, 128, 129, 171, 255, 256, 32767, 32768, 65535, 65536, 8_388_607, 8_388_608, 1 << 31, (1 << 32) + 5] {
+            for lcn in [0u64, 1, 127, 128, 255, 256, 5119, 1 << 20, 1 << 33] {
+                let enc = encode_runs(&[Run { vcn: 0, len, lcn: Some(lcn) }, Run { vcn: len, len: 3, lcn: Some(lcn + 1000) }]);
+                let d = decode_signed(&enc);
+                assert_eq!(d[0].0, len as i64, "length {len}");
+                assert_eq!(d[0].1, Some(lcn as i64), "lcn {lcn}");
+                assert_eq!(d[1], (3, Some(1000)));
+            }
+        }
+        // sparse run too
+        assert_eq!(decode_signed(&encode_runs(&[Run { vcn: 0, len: 200, lcn: None }]))[0], (200, None));
+    }
+}
+
+fn key_of(rec: &Rec) -> Result<Vec<u8>> {
+    split(&rec.buf)?.iter().find(|a| a.ty == T_FILENAME).and_then(attr_value).map(|v| v.to_vec()).ok_or(FsError::Corrupt("new record has no FILE_NAME"))
+}
