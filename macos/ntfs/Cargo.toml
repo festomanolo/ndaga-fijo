@@ -1,0 +1,20 @@
+[package]
+name = "ndaga-ntfs"
+version = "1.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+description = "Ndaga Fijo's NTFS file copier and staged-image streamer, built on VOLUMA's NTFS driver"
+
+[dependencies]
+block-device = { path = "vendor/block-device" }
+fs-core = { path = "vendor/fs-core" }
+fs-ntfs = { path = "vendor/fs-ntfs" }
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[workspace]
