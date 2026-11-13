@@ -12,6 +12,9 @@
 - Checked on disk images: every file byte-identical when read back by macOS' NTFS driver, and ntfs-3g's
   consistency check (`ntfsresize -i -f`) reports no errors, for both MBR and GPT.
 
+**Not verified yet:** booting NTFS drives on real PCs (UEFI:NTFS and legacy BIOS), and Windows' own `chkdsk` on
+them. Please report results in an issue. macOS mounts NTFS drives read-only; that is normal.
+
 ## Ndaga Fijo 1.0.0
 
 A native macOS bootable-USB creator (Apple Silicon + Intel, macOS 13+), based on Rufus.
