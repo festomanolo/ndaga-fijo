@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ndaga-fijo"
-version = "1.0.0"
+version = "1.1.0"
 description = "Create bootable USB drives on macOS from ISO and disk images: fast, safe, and Windows-ready. Based on Rufus."
 readme = "README.md"
 requires-python = ">=3.8"
