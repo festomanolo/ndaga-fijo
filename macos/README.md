@@ -17,7 +17,8 @@ Website: https://festomanolo.com/ndaga-fijo/ · Install: `pip install ndaga-fijo
 
     ./build-app.sh && open build/NdagaFijo.app
 
-Requires Xcode command line tools (Swift 5.9+), macOS 13+.
+Requires Xcode command line tools (Swift 5.9+), macOS 13+, and Rust (with the `aarch64-apple-darwin` and
+`x86_64-apple-darwin` targets) for the NTFS tools; the first build downloads ntfs-3g once (cached in `ntfs/.cache`).
 
 ## How it works
 
