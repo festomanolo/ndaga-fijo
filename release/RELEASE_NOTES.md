@@ -15,6 +15,10 @@
 **Not verified yet:** booting NTFS drives on real PCs (UEFI:NTFS and legacy BIOS), and Windows' own `chkdsk` on
 them. Please report results in an issue. macOS mounts NTFS drives read-only; that is normal.
 
+**Install**
+- Download the DMG or ZIP, or `pip install --upgrade ndaga-fijo` then `ndaga-fijo`.
+- The app is ad-hoc signed, not notarized. If macOS blocks it: right-click → Open, or System Settings → Privacy & Security → Open Anyway. (`pip install` avoids the prompt.)
+
 ## Ndaga Fijo 1.0.0
 
 A native macOS bootable-USB creator (Apple Silicon + Intel, macOS 13+), based on Rufus.
