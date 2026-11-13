@@ -1,6 +1,10 @@
 ## Ndaga Fijo 1.1.0
 
 **New: NTFS drives, so Windows images with files over 4 GB work**
+- Images with a file FAT32 cannot hold (such as a Windows 10/11 `install.esd` over 4 GB) are now written as NTFS. This
+  happens automatically, as Rufus does, or you can pick NTFS in the menu. Previously these failed with
+  "FAT32 cannot hold files over 4 GB".
+- Same layout as Rufus: an NTFS partition plus a 1 MB **UEFI:NTFS** partition (Secure Boot signed), so UEFI PCs boot
 ## Ndaga Fijo 1.0.0
 
 A native macOS bootable-USB creator (Apple Silicon + Intel, macOS 13+), based on Rufus.
