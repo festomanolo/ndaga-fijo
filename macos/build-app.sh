@@ -8,6 +8,10 @@ BIN=.build/apple/Products/Release/NdagaFijo
 APP=build/NdagaFijo.app
 rm -rf "$APP" && mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/NdagaFijo"
+# NTFS media: mkntfs (ntfs-3g) + ndaga-ntfs (VOLUMA's NTFS driver) + Rufus' UEFI:NTFS image, next to the executable.
+./ntfs/build.sh build/tools
+cp build/tools/mkntfs build/tools/ndaga-ntfs "$APP/Contents/MacOS/"
+cp ../res/uefi/uefi-ntfs.img "$APP/Contents/Resources/uefi-ntfs.img"
 cp assets/NdagaFijo.icns "$APP/Contents/Resources/NdagaFijo.icns"
 
 cat > "$APP/Contents/Info.plist" <<PL
