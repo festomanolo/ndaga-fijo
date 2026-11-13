@@ -150,8 +150,10 @@ enum NtfsMedia {
                 let secs = max(Date().timeIntervalSince(started), 0.001)
                 let rate = done / secs
                 if rate > 0, done < total { rep.eta((total - done) / rate) }
-                let name = f.count > 3 && f[3] != "done" ? " " + f[3] : ""
-                rep.progress(from + (to - from) * done / total, String(format: "%@%@ %.0f MB/s", label, String(name.suffix(48)), rate / 1_000_000))
+                var name = f.count > 3 && f[3] != "done" ? String(f[3]) : ""
+                if name.count > 44 { name = "…" + name.suffix(43) }
+                rep.progress(from + (to - from) * done / total,
+                             String(format: "%@%@ %.0f MB/s", label, name.isEmpty ? "..." : " " + name, rate / 1_000_000))
             }
         }
         p.waitUntilExit()
