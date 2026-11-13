@@ -30,6 +30,16 @@ Requires Xcode command line tools (Swift 5.9+), macOS 13+, and Rust (with the `a
   untouched, only headers are rewritten), which Windows Setup reads natively. With MBR + FAT32 and a `bootmgr` on the image,
   the Windows 7 MBR and FAT32 NT boot record (from `src/ms-sys`) are installed so legacy BIOS can boot too. Other extracted
   ISOs boot via UEFI only.
+* **NTFS** (chosen in the menu, or picked automatically, as Rufus does, when the image has a file FAT32 cannot hold,
+  such as a Windows `install.esd` over 4 GB): macOS can neither create nor write NTFS, so Ndaga Fijo brings its own tools.
+  `mkntfs` (from [ntfs-3g](https://github.com/tuxera/ntfs-3g), built by `ntfs/build.sh` from the checksummed release)
+  formats a sparse image on the Mac, `ndaga-ntfs` copies the files into it with the NTFS driver from
+  [VOLUMA](https://github.com/festomanolo/voluma) (vendored in `ntfs/vendor`), and only the clusters in use are then
+  streamed to the drive. The drive gets Rufus' layout: the NTFS partition, plus a 1 MB **UEFI:NTFS** partition
+  (`res/uefi/uefi-ntfs.img`, Secure Boot signed) at the end, which lets UEFI firmware boot from NTFS. On MBR the
+  Windows 7 MBR and the ms-sys NTFS boot record are installed too, for legacy BIOS. The partition table is written
+  last, so a failed job never leaves a half-made volume. If the Mac lacks room for the staging image, files are
+  written to the drive directly instead. macOS mounts the result read-only, which is normal for NTFS.
 * **Speed:** copying thousands of files through the macOS FAT driver onto a USB stick is dominated by slow per-file
   metadata writes (34 min for the 6,959-file Windows XP ISO in our test, against 67 s for a raw write of the same bytes).
   For FAT32, Ndaga Fijo formats the stick, clones its FAT geometry into a sparse image on the Mac's SSD, copies the files
