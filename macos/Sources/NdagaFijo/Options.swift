@@ -13,7 +13,7 @@ enum PartitionScheme: String, CaseIterable, Identifiable {
 }
 
 enum FileSystemChoice: String, CaseIterable, Identifiable {
-    case fat32 = "FAT32", exfat = "ExFAT"
+    case fat32 = "FAT32", exfat = "ExFAT", ntfs = "NTFS"
     var id: String { rawValue }
 }
 
