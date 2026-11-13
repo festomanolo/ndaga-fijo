@@ -5,6 +5,9 @@
   happens automatically, as Rufus does, or you can pick NTFS in the menu. Previously these failed with
   "FAT32 cannot hold files over 4 GB".
 - Same layout as Rufus: an NTFS partition plus a 1 MB **UEFI:NTFS** partition (Secure Boot signed), so UEFI PCs boot
+  from NTFS. On MBR, the Windows 7 MBR and NTFS boot record are installed for legacy BIOS.
+- Formatted with `mkntfs` from ntfs-3g; files written with VOLUMA's NTFS driver. Both are bundled, nothing to install.
+- Fast: staged on your SSD, then only the used clusters are streamed to the drive. A 5.5 GB Windows 10 ISO (910 files)
 ## Ndaga Fijo 1.0.0
 
 A native macOS bootable-USB creator (Apple Silicon + Intel, macOS 13+), based on Rufus.
