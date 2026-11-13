@@ -70,5 +70,7 @@ Set `NDAGA_ALLOW_DISK_IMAGES=1` to also list `hdiutil attach -nomount` disk imag
 ## Credits and license
 
 Ndaga Fijo is a derivative work of [Rufus](https://github.com/pbatard/rufus) by Pete Batard and contributors, and of
-ms-sys (boot code in `Sources/NdagaFijo/BootCode.swift`). It is licensed under the GNU GPL v3 or later, see
+ms-sys (boot code in `Sources/NdagaFijo/BootCode.swift`). The app bundles `mkntfs` from ntfs-3g (GPL v2 or later,
+source: https://tuxera.com/opensource/ntfs-3g_ntfsprogs-2022.10.3.tgz), the UEFI:NTFS image from Rufus
+(see `../res/uefi/readme.txt`) and VOLUMA's MIT-licensed NTFS driver (`ntfs/vendor`). It is licensed under the GNU GPL v3 or later, see
 `../LICENSE.txt`. "Rufus" is the name of the original project; Ndaga Fijo is not affiliated with or endorsed by it.
