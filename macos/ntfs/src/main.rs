@@ -69,6 +69,7 @@ impl Progress {
 fn flush(f: &std::fs::File) -> Res<()> {
     match f.sync_all() {
         Ok(()) => Ok(()),
+        Err(e) if e.raw_os_error() == Some(libc::ENOTTY) || e.raw_os_error() == Some(libc::ENODEV) => {
 // ---------------------------------------------------------------- copy
 
 struct Tree { dirs: Vec<String>, files: Vec<(PathBuf, String, u64)>, total: u64 }
