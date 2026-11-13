@@ -8,6 +8,10 @@
   from NTFS. On MBR, the Windows 7 MBR and NTFS boot record are installed for legacy BIOS.
 - Formatted with `mkntfs` from ntfs-3g; files written with VOLUMA's NTFS driver. Both are bundled, nothing to install.
 - Fast: staged on your SSD, then only the used clusters are streamed to the drive. A 5.5 GB Windows 10 ISO (910 files)
+  was written in **88 s** to a disk image.
+- Checked on disk images: every file byte-identical when read back by macOS' NTFS driver, and ntfs-3g's
+  consistency check (`ntfsresize -i -f`) reports no errors, for both MBR and GPT.
+
 ## Ndaga Fijo 1.0.0
 
 A native macOS bootable-USB creator (Apple Silicon + Intel, macOS 13+), based on Rufus.
