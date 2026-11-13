@@ -72,6 +72,8 @@ enum Helper {
             rep.fail(e.message); return 1
         } catch let e as Staging.Failure {
             rep.fail(e.message); return 1
+        } catch let e as NtfsMedia.Failure {
+            rep.fail(e.message); return 1
         } catch {
             rep.fail(error.localizedDescription); return 1
         }
