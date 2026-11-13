@@ -166,8 +166,9 @@ enum Helper {
         return t.isEmpty ? "NDAGAFIJO" : t
     }
 
-    static func extract(image: String, drive: Drive, scheme: String, fs: String, label: String, rep: Reporter) throws {
-        guard ["MBR", "GPT"].contains(scheme), ["FAT32", "ExFAT"].contains(fs) else {
+    static func extract(image: String, drive: Drive, scheme: String, fs requestedFS: String, label: String, rep: Reporter) throws {
+        var fs = requestedFS
+        guard ["MBR", "GPT"].contains(scheme), ["FAT32", "ExFAT", "NTFS"].contains(fs) else {
             throw HelperError(message: "Unsupported scheme/file system")
         }
         try unmount(drive, rep)
