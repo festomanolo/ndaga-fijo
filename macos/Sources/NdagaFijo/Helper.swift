@@ -189,7 +189,12 @@ enum Helper {
             fs == "FAT32" && $0.size > TreeCopy.fat32Limit && $0.rel.lowercased() != "sources/install.wim"      // install.wim is split
         }.map { $0.rel }
         if !tooBig.isEmpty {
-            throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))). The drive was not modified.")
+            // As Rufus does: media with files FAT32 cannot hold gets NTFS (plus UEFI:NTFS so UEFI still boots).
+            guard NtfsMedia.missingTools.isEmpty else {
+                throw HelperError(message: "FAT32 cannot hold files over 4 GB (\(tooBig.joined(separator: ", "))) and this build has no NTFS support. The drive was not modified.")
+            }
+            rep.log("FAT32 cannot hold \(tooBig.joined(separator: ", ")) (over 4 GB), using NTFS instead")
+            fs = "NTFS"
         }
         if scanned.total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
 
