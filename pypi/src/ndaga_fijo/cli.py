@@ -18,9 +18,10 @@ def app_path() -> Path:
 
 
 def _ensure_executable(app: Path) -> None:
-    exe = app / "Contents" / "MacOS" / "NdagaFijo"
-    if exe.exists() and not os.access(exe, os.X_OK):
-        exe.chmod(exe.stat().st_mode | 0o111)
+    # The app and its bundled NTFS tools (mkntfs, ndaga-ntfs) all live in Contents/MacOS.
+    for exe in (app / "Contents" / "MacOS").glob("*"):
+        if exe.is_file() and not os.access(exe, os.X_OK):
+            exe.chmod(exe.stat().st_mode | 0o111)
 
 
 def main(argv=None) -> int:
