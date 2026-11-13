@@ -443,3 +443,448 @@ impl NtfsFs {
     fn extend_mft(&self) -> Result<()> {
         let f0 = self.load_file(0)?;
         let mut r0 = self.rec_load(0)?;
+        let mut attrs = split(&r0.buf)?;
+        if attrs.iter().any(|a| a.ty == T_ATTRLIST) { return Err(FsError::Unsupported("$MFT with an attribute list")); }
+        let d = f0.attr(T_DATA, "").and_then(|a| a.nr.clone()).ok_or(FsError::Corrupt("$MFT data is resident"))?;
+        let bmap = f0.attr(T_BITMAP, "").cloned().ok_or(FsError::Corrupt("$MFT has no bitmap"))?;
+        let bnr = bmap.nr.clone().ok_or(FsError::Unsupported("resident $MFT bitmap"))?;
+        let mut runs = d.runs.clone();
+        let (mut alloc, mut fresh): (u64, Vec<Run>) = (d.alloc, Vec::new());
+        let slack = (alloc.saturating_sub(d.size) / self.rec_size) * self.rec_size;
+        let grow = if slack > 0 { slack } else {
+            let ext = (64 * self.rec_size).div_ceil(self.cs).max(1);
+            let near = runs.last().and_then(|r| r.lcn.map(|l| l + r.len));
+            fresh = self.alloc_clusters(ext, near)?;
+            let mut vcn = runs.last().map(|r| r.vcn + r.len).unwrap_or(0);
+            for g in &fresh {
+                match runs.last_mut() { Some(l) if l.lcn.map(|x| x + l.len) == g.lcn => l.len += g.len, _ => runs.push(Run { vcn, len: g.len, lcn: g.lcn }) }
+                vcn += g.len;
+            }
+            alloc += ext * self.cs;
+            (ext * self.cs / self.rec_size) * self.rec_size
+        };
+        let result = (|| -> Result<()> {
+            let (old_n, new_size) = (d.size / self.rec_size, d.size + grow);
+            let new_n = new_size / self.rec_size;
+            // bitmap must cover the new records
+            let need = align8(new_n.div_ceil(8) as usize) as u64;
+            if need > bnr.alloc { return Err(FsError::Unsupported("$MFT bitmap needs more clusters")); }
+            if need > bnr.size {
+                let zeros = vec![0u8; (need - bnr.size) as usize];
+                self.write_attr_range(&bmap, bnr.size, &zeros)?;
+            }
+            // $MFT's own data runs must be visible before we format records inside the new space
+            let saved = self.mft_runs.lock().unwrap().clone();
+            *self.mft_runs.lock().unwrap() = runs.clone();
+            let fmt = (|| -> Result<()> {
+                for n in old_n..new_n { let rec = self.fresh_record(n, 0, false); let mut b = rec.buf.clone(); put16(&mut b, 22, 0); let rr = Rec { num: n, buf: b }; self.rec_store(&rr)?; }
+                // record 0
+                let di = attrs.iter().position(|a| a.ty == T_DATA && a.name.is_empty()).ok_or(FsError::Corrupt("$MFT data attr missing"))?;
+                let (id, flags) = (attrs[di].id, le16(&attrs[di].b, 12));
+                attrs[di] = nonres_attr(T_DATA, "", id, flags, &runs, alloc, new_size, new_size, self.cs);
+                if need > bnr.size {
+                    let bi = attrs.iter().position(|a| a.ty == T_BITMAP && a.name.is_empty()).ok_or(FsError::Corrupt("$MFT bitmap attr missing"))?;
+                    put64(&mut attrs[bi].b, 48, need); put64(&mut attrs[bi].b, 56, need);
+                }
+                join(&mut r0.buf, &attrs)?;
+                self.rec_store(&r0)
+            })();
+            if fmt.is_err() { *self.mft_runs.lock().unwrap() = saved; }
+            fmt
+        })();
+        if result.is_err() { self.free_clusters(&fresh).ok(); }
+        result
+    }
+
+    fn free_record(&self, n: u64) -> Result<()> {
+        let f0 = self.load_file(0)?;
+        let a = f0.attr(T_BITMAP, "").ok_or(FsError::Corrupt("$MFT has no bitmap"))?;
+        let mut byte = [0u8; 1];
+        let o = n / 8;
+        self.read_attr(a, o, &mut byte)?;
+        byte[0] &= !(1 << (n % 8));
+        self.write_attr_range(a, o, &byte)
+    }
+
+    // ---- volume dirty flag
+    fn set_dirty(&self, on: bool) -> Result<()> {
+        let mut r = self.rec_load(3)?;
+        let attrs = split(&r.buf)?;
+        let a = attrs.iter().find(|a| a.ty == T_VOLINFO).ok_or(FsError::Corrupt("$Volume has no volume information"))?;
+        let vo = le16(&a.b, 20) as usize;
+        let ao = le16(&r.buf, 20) as usize + attrs.iter().take_while(|x| !std::ptr::eq(*x, a)).map(|x| x.b.len()).sum::<usize>();
+        let p = ao + vo + 10;
+        let mut f = le16(&r.buf, p);
+        if on { f |= 1 } else { f &= !1 }
+        put16(&mut r.buf, p, f);
+        self.rec_store(&r)
+    }
+
+    fn op<T>(&self, f: impl FnOnce() -> Result<T>) -> Result<T> {
+        self.require_writable()?;
+        let _g = self.wlock.lock().unwrap();
+        self.invalidate();
+        self.set_dirty(true)?;
+        let r = f();
+        self.invalidate();
+        // An I/O failure may have left metadata half-written: keep the dirty bit so Windows runs chkdsk.
+        if !matches!(&r, Err(FsError::Block(_))) { self.set_dirty(false)?; }
+        r
+    }
+
+    // ---- stdinfo helpers
+    fn touch(&self, r: &mut Rec, mtime: bool) -> Result<()> {
+        let mut attrs = split(&r.buf)?;
+        let now = now_ft();
+        if let Some(a) = attrs.iter_mut().find(|a| a.ty == T_STDINFO) {
+            let vo = le16(&a.b, 20) as usize;
+            if a.b.len() >= vo + 32 {
+                if mtime { put64(&mut a.b, vo + 8, now); }
+                put64(&mut a.b, vo + 16, now); put64(&mut a.b, vo + 24, now);
+            }
+        }
+        join(&mut r.buf, &attrs)
+    }
+
+    fn seq_of(&self, n: u64) -> Result<u16> { Ok(le16(&self.rec_load(n)?.buf, 16)) }
+
+    // ================================================================ directory index
+    fn dir_ctx(&self, dnum: u64) -> Result<DirCtx> {
+        let rec = self.rec_load(dnum)?;
+        if le16(&rec.buf, 22) & 2 == 0 { return Err(FsError::NotADirectory(format!("record {dnum}"))); }
+        let attrs = split(&rec.buf)?;
+        if attrs.iter().any(|a| a.ty == T_ATTRLIST) { return Err(FsError::Unsupported("directory with an attribute list")); }
+        let file = self.load_file(dnum)?;
+        let ra = attrs.iter().find(|a| a.ty == T_INDEX_ROOT && a.name == utf16("$I30")).ok_or(FsError::Corrupt("directory has no $I30 root"))?;
+        let rv = attr_value(ra).ok_or(FsError::Corrupt("non-resident index root"))?;
+        if rv.len() < 32 || le32(rv, 0) != 0x30 { return Err(FsError::Corrupt("bad index root")); }
+        let root = to_ents(parse_node(rv, 16)?);
+        let mut root_hdr = [0u8; 16];
+        root_hdr.copy_from_slice(&rv[..16]);
+        let (mut free_blocks, mut nblocks) = (Vec::new(), 0);
+        if let Some(al) = file.attr(T_INDEX_ALLOC, "$I30") {
+            nblocks = al.data_size() / self.idx_size;
+            let bm = attrs.iter().find(|a| a.ty == T_BITMAP && a.name == utf16("$I30")).and_then(attr_value)
+                .ok_or(FsError::Unsupported("index bitmap missing or non-resident"))?;
+            let unit = self.idx_size / self.index_unit_w();
+            for b in 0..nblocks {
+                if (b / 8) as usize >= bm.len() || !bit(bm, b) { free_blocks.push(b * unit); }
+            }
+        }
+        Ok(DirCtx { num: dnum, rec, attrs, file, root, root_hdr, free_blocks, nblocks })
+    }
+
+    fn index_unit_w(&self) -> u64 { if self.idx_size >= self.cs { self.cs } else { 512 } }
+
+    fn read_node_w(&self, c: &DirCtx, loc: Loc) -> Result<Vec<Ent>> {
+        match loc {
+            Loc::Root => Ok(c.root.clone()),
+            Loc::Block(vcn) => {
+                let al = c.file.attr(T_INDEX_ALLOC, "$I30").ok_or(FsError::Corrupt("index has children but no allocation"))?;
+                let off = vcn * self.index_unit_w();
+                if off + self.idx_size > al.data_size() { return Err(FsError::Corrupt("index block outside allocation")); }
+                let mut blk = vec![0u8; self.idx_size as usize];
+                self.read_attr(al, off, &mut blk)?;
+                if &blk[0..4] != b"INDX" { return Err(FsError::Corrupt("bad INDX signature")); }
+                let (uo, uc) = (le16(&blk, 4) as usize, le16(&blk, 6) as usize);
+                unfixup(&mut blk, uo, uc)?;
+                if le64(&blk, 16) != vcn { return Err(FsError::Corrupt("INDX VCN mismatch")); }
+                Ok(to_ents(parse_node(&blk, 24)?))
+            }
+        }
+    }
+
+    fn write_block_w(&self, c: &DirCtx, vcn: u64, ents: &[Ent]) -> Result<()> {
+        let al = c.file.attr(T_INDEX_ALLOC, "$I30").ok_or(FsError::Corrupt("no index allocation"))?;
+        self.write_block_to(al, vcn, ents)
+    }
+
+    fn write_block_to(&self, al: &Attr, vcn: u64, ents: &[Ent]) -> Result<()> {
+        let mut b = vec![0u8; self.idx_size as usize];
+        b[0..4].copy_from_slice(b"INDX");
+        let uc = self.idx_size as usize / 512 + 1;
+        put16(&mut b, 4, 0x28); put16(&mut b, 6, uc as u16);
+        put64(&mut b, 16, vcn);
+        let body = ser_ents(ents);
+        put32(&mut b, 24, (ENTRIES_AT - 24) as u32);
+        put32(&mut b, 28, (ENTRIES_AT - 24 + body.len()) as u32);
+        put32(&mut b, 32, (self.idx_size as usize - 24) as u32);
+        b[36] = ents.iter().any(|e| e.child.is_some()) as u8;
+        put16(&mut b, 0x28, 1);
+        b[ENTRIES_AT..ENTRIES_AT + body.len()].copy_from_slice(&body);
+        fixup(&mut b);
+        self.write_attr_range(al, vcn * self.index_unit_w(), &b)
+    }
+
+    fn root_attr(&self, c: &DirCtx, id: u16, ents: &[Ent]) -> RawAttr {
+        let body = ser_ents(ents);
+        let mut v = vec![0u8; 32 + body.len()];
+        v[..16].copy_from_slice(&c.root_hdr);
+        put32(&mut v, 16, 16); put32(&mut v, 20, (16 + body.len()) as u32); put32(&mut v, 24, (16 + body.len()) as u32);
+        v[28] = ents.iter().any(|e| e.child.is_some()) as u8;
+        v[32..].copy_from_slice(&body);
+        res_attr(T_INDEX_ROOT, "$I30", id, 0, &v, 0)
+    }
+
+    fn node_fits(&self, c: &DirCtx, loc: Loc, ents: &[Ent]) -> bool {
+        match loc {
+            Loc::Block(_) => ents_len(ents) <= self.idx_size as usize - ENTRIES_AT,
+            Loc::Root => {
+                let others: usize = c.attrs.iter().filter(|a| !(a.ty == T_INDEX_ROOT && a.name == utf16("$I30"))).map(|a| a.b.len()).sum();
+                let mine = align8(0x20 + 32 + ents_len(ents));
+                le16(&c.rec.buf, 20) as usize + others + mine + 8 <= le32(&c.rec.buf, 28) as usize
+            }
+        }
+    }
+
+    fn cmp_ent(&self, e: &Ent, units: &[u16]) -> Ordering { self.cmp_units(&key_units(&e.key), units) }
+
+    /// Descends to the node/position for `units`; `found` tells whether an equal key exists at stack.top().pos.
+    fn locate(&self, c: &DirCtx, units: &[u16]) -> Result<(Vec<Pn>, bool)> {
+        let (mut loc, mut stack) = (Loc::Root, Vec::new());
+        for _ in 0..40 {
+            let ents = self.read_node_w(c, loc)?;
+            let mut pos = ents.len().saturating_sub(1);
+            for (i, e) in ents.iter().enumerate() {
+                if e.last { pos = i; break; }
+                match self.cmp_ent(e, units) {
+                    Ordering::Greater => { pos = i; break; }
+                    Ordering::Equal => { stack.push(Pn { loc, ents, pos: i }); return Ok((stack, true)); }
+                    Ordering::Less => {}
+                }
+            }
+            match ents.get(pos).and_then(|e| e.child) {
+                Some(ch) => { stack.push(Pn { loc, ents, pos }); loc = Loc::Block(ch); }
+                None => { stack.push(Pn { loc, ents, pos }); return Ok((stack, false)); }
+            }
+        }
+        Err(FsError::Corrupt("index too deep"))
+    }
+
+    fn take_block(&self, c: &DirCtx, plan: &mut Plan) -> std::result::Result<u64, Need> {
+        let v = c.free_blocks.iter().copied().find(|v| !plan.used_blocks.contains(v)).ok_or(Need::Blocks)?;
+        plan.used_blocks.push(v);
+        Ok(v)
+    }
+
+    fn put_write(plan: &mut Plan, loc: Loc, ents: Vec<Ent>) {
+        if let Some(w) = plan.writes.iter_mut().find(|w| w.0 == loc) { w.1 = ents; } else { plan.writes.push((loc, ents)); }
+    }
+
+    /// Resolves overflow bottom-up; `stack.last()` is the modified node.
+    fn settle(&self, c: &DirCtx, plan: &mut Plan, mut stack: Vec<Pn>) -> std::result::Result<(), Need> {
+        while let Some(cur) = stack.pop() {
+            if self.node_fits(c, cur.loc, &cur.ents) { Self::put_write(plan, cur.loc, cur.ents); return Ok(()); }
+            if cur.loc == Loc::Root {
+                // Push the root's entries down into a new block; the root keeps a single pointer.
+                let b = self.take_block(c, plan)?;
+                // Write the new root now: if the pushed-down block fits, nothing below revisits it.
+                Self::put_write(plan, Loc::Root, vec![Ent::end(Some(b))]);
+                let root = Pn { loc: Loc::Root, ents: vec![Ent::end(Some(b))], pos: 0 };
+                stack.push(root);
+                stack.push(Pn { loc: Loc::Block(b), ents: cur.ents, pos: 0 });
+                continue;
+            }
+            let Loc::Block(vcn) = cur.loc else { unreachable!() };
+            let mut parent = stack.pop().ok_or(Need::Err(FsError::Corrupt("split without parent")))?;
+            // split at the entry that best halves the byte size
+            let n = cur.ents.len() - 1; // non-end entries
+            if n < 2 { return Err(Need::Err(FsError::NoSpace)); }
+            let (mut acc, half, mut m) = (0usize, ents_len(&cur.ents) / 2, 0usize);
+            for (i, e) in cur.ents.iter().take(n).enumerate() { acc += e.len(); if acc >= half { m = i; break; } }
+            m = m.clamp(1, n - 1);
+            let mut left: Vec<Ent> = cur.ents[..m].to_vec();
+            let med = cur.ents[m].clone();
+            let mut right: Vec<Ent> = cur.ents[m + 1..].to_vec();
+            left.push(Ent::end(med.child));
+            let _ = &mut right;
+            let rb = self.take_block(c, plan)?;
+            Self::put_write(plan, Loc::Block(vcn), left);
+            Self::put_write(plan, Loc::Block(rb), right);
+            let promoted = Ent { mref: med.mref, key: med.key, child: Some(vcn), last: false };
+            parent.ents[parent.pos].child = Some(rb);
+            parent.ents.insert(parent.pos, promoted);
+            stack.push(parent);
+        }
+        Ok(())
+    }
+
+    fn commit_plan(&self, c: &mut DirCtx, plan: &Plan) -> Result<()> {
+        for (loc, ents) in &plan.writes {
+            if let Loc::Block(v) = loc { self.write_block_w(c, *v, ents)?; }
+        }
+        let mut changed = false;
+        if !plan.used_blocks.is_empty() {
+            let unit = self.idx_size / self.index_unit_w();
+            let bi = c.attrs.iter().position(|a| a.ty == T_BITMAP && a.name == utf16("$I30")).ok_or(FsError::Corrupt("index bitmap missing"))?;
+            let mut val = attr_value(&c.attrs[bi]).unwrap().to_vec();
+            for v in &plan.used_blocks { set_bit(&mut val, v / unit, true); }
+            let id = c.attrs[bi].id;
+            c.attrs[bi] = res_attr(T_BITMAP, "$I30", id, 0, &val, 0);
+            changed = true;
+        }
+        if let Some((_, ents)) = plan.writes.iter().find(|w| w.0 == Loc::Root) {
+            let ri = c.attrs.iter().position(|a| a.ty == T_INDEX_ROOT && a.name == utf16("$I30")).unwrap();
+            let id = c.attrs[ri].id;
+            c.attrs[ri] = self.root_attr(c, id, ents);
+            changed = true;
+        }
+        if changed {
+            join(&mut c.rec.buf, &c.attrs)?;
+            self.rec_store(&c.rec)?;
+        }
+        Ok(())
+    }
+
+    /// Adds clusters to (or creates) the directory's INDEX_ALLOCATION and bitmap so a new block exists.
+    fn extend_index(&self, dnum: u64) -> Result<()> {
+        let mut c = self.dir_ctx(dnum)?;
+        let per = (self.idx_size / self.cs).max(1);
+        let existing = c.file.attr(T_INDEX_ALLOC, "$I30").cloned();
+        let (mut runs, old_alloc, id) = match &existing {
+            Some(a) => {
+                let nr = a.nr.as_ref().ok_or(FsError::Corrupt("resident index allocation"))?;
+                let id = c.attrs.iter().find(|x| x.ty == T_INDEX_ALLOC).map(|x| x.id).unwrap();
+                (nr.runs.clone(), nr.alloc, id)
+            }
+            None => (Vec::new(), 0, next_attr_id(&mut c.rec.buf)),
+        };
+        let near = runs.last().and_then(|r| r.lcn.map(|l| l + r.len));
+        let new = self.alloc_clusters(per, near)?;
+        let base = runs.last().map(|r| r.vcn + r.len).unwrap_or(0);
+        let mut vcn = base;
+        for r in new {
+            match runs.last_mut() {
+                Some(l) if l.lcn.map(|x| x + l.len) == r.lcn => l.len += r.len,
+                _ => runs.push(Run { vcn, len: r.len, lcn: r.lcn }),
+            }
+            vcn += r.len;
+        }
+        let alloc = old_alloc + per * self.cs;
+        let attr = nonres_attr(T_INDEX_ALLOC, "$I30", id, 0, &runs, alloc, alloc, alloc, self.cs);
+        match c.attrs.iter().position(|a| a.ty == T_INDEX_ALLOC) { Some(i) => c.attrs[i] = attr, None => c.attrs.push(attr) }
+        let nblocks = alloc / self.idx_size;
+        let need = align8(((nblocks + 7) / 8) as usize).max(8);
+        match c.attrs.iter().position(|a| a.ty == T_BITMAP && a.name == utf16("$I30")) {
+            Some(i) => {
+                let mut v = attr_value(&c.attrs[i]).ok_or(FsError::Unsupported("non-resident index bitmap"))?.to_vec();
+                if v.len() < need { v.resize(need, 0); }
+                let id = c.attrs[i].id;
+                c.attrs[i] = res_attr(T_BITMAP, "$I30", id, 0, &v, 0);
+            }
+            None => { let id = next_attr_id(&mut c.rec.buf); c.attrs.push(res_attr(T_BITMAP, "$I30", id, 0, &vec![0u8; need], 0)); }
+        }
+        // First conversion: the root is (nearly) full, which is why we are here. Move its entries into
+        // block 0 in the same record rewrite so the record has room for the new attributes.
+        let mut pushdown: Option<Vec<Ent>> = None;
+        if existing.is_none() {
+            let id0 = c.attrs.iter().find(|a| a.ty == T_INDEX_ROOT).map(|a| a.id).unwrap();
+            pushdown = Some(c.root.clone());
+            let ri = c.attrs.iter().position(|a| a.ty == T_INDEX_ROOT && a.name == utf16("$I30")).unwrap();
+            c.attrs[ri] = self.root_attr(&c, id0, &[Ent::end(Some(0))]);
+            let bi = c.attrs.iter().position(|a| a.ty == T_BITMAP && a.name == utf16("$I30")).unwrap();
+            let mut v = attr_value(&c.attrs[bi]).unwrap().to_vec();
+            set_bit(&mut v, 0, true);
+            let id = c.attrs[bi].id;
+            c.attrs[bi] = res_attr(T_BITMAP, "$I30", id, 0, &v, 0);
+        }
+        c.attrs.sort_by_key(|a| a.ty);
+        let r = (|| -> Result<()> {
+            if let Some(ents) = &pushdown {
+                let tmp = Attr { ty: T_INDEX_ALLOC, name: utf16("$I30"), flags: 0, id, res: None,
+                                 nr: Some(NonRes { runs: runs.clone(), alloc, size: alloc, init: alloc, comp_unit: 0 }) };
+                self.write_block_to(&tmp, 0, ents)?;
+            }
+            join(&mut c.rec.buf, &c.attrs)?;
+            self.rec_store(&c.rec)
+        })();
+        if r.is_err() { self.free_clusters(&runs[runs.len().saturating_sub(1)..]).ok(); }
+        r
+    }
+
+    fn with_index_plan(&self, dnum: u64, build: &dyn Fn(&DirCtx, &mut Plan) -> std::result::Result<(), Need>) -> Result<()> {
+        for _ in 0..16 {
+            let mut c = self.dir_ctx(dnum)?;
+            let mut plan = Plan { writes: Vec::new(), used_blocks: Vec::new() };
+            match build(&c, &mut plan) {
+                Ok(()) => return self.commit_plan(&mut c, &plan),
+                Err(Need::Blocks) => self.extend_index(dnum)?,
+                Err(Need::Err(e)) => return Err(e),
+            }
+        }
+        Err(FsError::NoSpace)
+    }
+
+    fn idx_insert(&self, dnum: u64, key: Vec<u8>, mref: u64) -> Result<()> {
+        let units = key_units(&key);
+        self.with_index_plan(dnum, &|c, plan| {
+            let (mut stack, found) = self.locate(c, &units)?;
+            if found { return Err(Need::Err(FsError::AlreadyExists(String::from_utf16_lossy(&units)))); }
+            let leaf = stack.last_mut().unwrap();
+            let pos = leaf.pos;
+            leaf.ents.insert(pos, Ent { mref, key: key.clone(), child: None, last: false });
+            self.settle(c, plan, stack)
+        })
+    }
+
+    fn idx_remove(&self, dnum: u64, units: &[u16], mref: u64) -> Result<()> {
+        self.with_index_plan(dnum, &|c, plan| {
+            let (mut stack, found) = self.locate(c, units)?;
+            if !found { return Err(Need::Err(FsError::Corrupt("index entry to remove not found"))); }
+            let node = stack.last_mut().unwrap();
+            if node.ents[node.pos].mref & MFT_MASK != mref & MFT_MASK { return Err(Need::Err(FsError::Corrupt("index entry points to a different file"))); }
+            let i = node.pos;
+            let Some(child) = node.ents[i].child else {
+                node.ents.remove(i);
+                return self.settle(c, plan, stack);
+            };
+            // internal entry: replace with in-order predecessor (or successor) from a leaf
+            let walk = |start: u64, rightmost: bool| -> std::result::Result<Vec<Pn>, Need> {
+                let (mut loc, mut path) = (Loc::Block(start), Vec::new());
+                for _ in 0..40 {
+                    let ents = self.read_node_w(c, loc)?;
+                    let pos = if rightmost { ents.len() - 1 } else { 0 };
+                    let next = ents[pos].child;
+                    path.push(Pn { loc, ents, pos });
+                    match next { Some(ch) => loc = Loc::Block(ch), None => return Ok(path) }
+                }
+                Err(Need::Err(FsError::Corrupt("index too deep")))
+            };
+            let mut leafpath = walk(child, true)?;
+            let leaf = leafpath.last_mut().unwrap();
+            let moved = if leaf.ents.len() >= 2 { Some(leaf.ents.remove(leaf.ents.len() - 2)) } else { None };
+            let moved = match moved {
+                Some(m) => m,
+                None => {
+                    let next = stack.last().unwrap().ents[i + 1].child
+                        .ok_or(Need::Err(FsError::Unsupported("directory index has an empty leaf here")))?;
+                    leafpath = walk(next, false)?;
+                    let leaf = leafpath.last_mut().unwrap();
+                    if leaf.ents.len() < 2 { return Err(Need::Err(FsError::Unsupported("directory index has empty leaves here"))); }
+                    leaf.ents.remove(0)
+                }
+            };
+            let leaf = leafpath.pop().unwrap();
+            Self::put_write(plan, leaf.loc, leaf.ents);
+            let n = stack.last_mut().unwrap();
+            n.ents[i].key = moved.key; n.ents[i].mref = moved.mref;
+            self.settle(c, plan, stack)
+        })
+    }
+
+    fn idx_update_key(&self, dnum: u64, units: &[u16], new_key: Vec<u8>) -> Result<()> {
+        self.with_index_plan(dnum, &|c, plan| {
+            let (mut stack, found) = self.locate(c, units)?;
+            if !found { return Err(Need::Err(FsError::Corrupt("index entry to update not found"))); }
+            let n = stack.last_mut().unwrap();
+            let p = n.pos;
+            if n.ents[p].key.len() != new_key.len() { return Err(Need::Err(FsError::Corrupt("key size changed"))); }
+            n.ents[p].key = new_key.clone();
+            self.settle(c, plan, stack)
+        })
+    }
+
+    #[doc(hidden)]
+    /// Test hook: walks a directory's whole index and checks strict ordering and a consistent structure.
+    pub fn verify_dir_index(&self, path: &str) -> Result<usize> {
+        let d = self.walk_dir(&normalize_path(path)?)?;
