@@ -200,7 +200,7 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
             p.add(n as u64, "");
         }
     }
-    dst.sync_all().map_err(|e| format!("flush failed: {e}"))?;
+    flush(&dst)?;
     println!("P {total} {total} done");
     Ok(())
 }
