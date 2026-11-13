@@ -1,0 +1,10 @@
+[package]
+name = "block-device"
+version = "0.1.1"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+libc = "0.2"
+thiserror = "2"
+
