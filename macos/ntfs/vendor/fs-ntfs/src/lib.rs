@@ -261,3 +261,266 @@ impl NtfsFs {
         for r in runs.iter() {
             if vcn >= r.vcn && vcn < r.vcn + r.len {
                 let l = r.lcn.ok_or(FsError::Corrupt("sparse MFT"))?;
+                let off = (l + (vcn - r.vcn)) * self.cs + byte % self.cs;
+                if off + self.rec_size > self.total_clusters * self.cs { return Err(FsError::Corrupt("MFT record outside volume")); }
+                return Ok(off);
+            }
+        }
+        Err(FsError::NotFound(format!("MFT record {n}")))
+    }
+
+    pub(crate) fn read_record_raw(&self, n: u64) -> Result<Vec<u8>> {
+        let off = self.mft_offset(n)?;
+        let mut b = vec![0u8; self.rec_size as usize];
+        self.dev.read_at(off, &mut b)?;
+        Ok(b)
+    }
+
+    /// Applies fixups, validates the header, returns the attributes.
+    pub(crate) fn parse_record(&self, b: &mut [u8], n: u64) -> Result<Vec<Attr>> {
+        if &b[0..4] != b"FILE" { return Err(FsError::Corrupt("MFT record has no FILE signature")); }
+        unfixup(b, le16(b, 4) as usize, le16(b, 6) as usize)?;
+        let (used, alloc, ao) = (le32(b, 24) as usize, le32(b, 28) as usize, le16(b, 20) as usize);
+        if used > b.len() || alloc > b.len() || used > alloc || ao < 0x30 || ao % 8 != 0 || ao + 8 > used {
+            return Err(FsError::Corrupt("bad MFT record header"));
+        }
+        let _ = n;
+        parse_attrs(b)
+    }
+
+    pub(crate) fn load_file(&self, n: u64) -> Result<File> {
+        if n >= MAX_FILE_RECORDS { return Err(FsError::Corrupt("record number out of range")); }
+        let mut b = self.read_record_raw(n)?;
+        let attrs = self.parse_record(&mut b, n)?;
+        if le16(&b, 22) & 1 == 0 { return Err(FsError::NotFound(format!("MFT record {n} is not in use"))); }
+        if le64(&b, 32) & MFT_MASK != 0 { return Err(FsError::Corrupt("extension record referenced as a file")); }
+        let rec_flags = le16(&b, 22);
+        let mut all: Vec<Attr> = Vec::new();
+        if let Some(al) = attrs.iter().find(|a| a.ty == T_ATTRLIST) {
+            let tmp = File { num: n, rec_flags, attrs: vec![al.clone()] };
+            let list = self.read_all(tmp.attrs.first().unwrap(), 16 << 20)?;
+            let mut seen = vec![n];
+            let mut o = 0usize;
+            while o + 26 <= list.len() {
+                let el = le16(&list, o + 4) as usize;
+                if el < 26 || o + el > list.len() { return Err(FsError::Corrupt("bad attribute list entry")); }
+                let rn = le64(&list, o + 16) & MFT_MASK;
+                if !seen.contains(&rn) {
+                    seen.push(rn);
+                    let mut eb = self.read_record_raw(rn)?;
+                    let ea = self.parse_record(&mut eb, rn)?;
+                    if le64(&eb, 32) & MFT_MASK != n { return Err(FsError::Corrupt("extension record has wrong base")); }
+                    all.extend(ea);
+                }
+                o += el;
+            }
+            all.extend(attrs.into_iter());
+        } else { all = attrs; }
+        // Merge non-resident extents of the same attribute (by start VCN).
+        let mut merged: Vec<Attr> = Vec::new();
+        for a in all.into_iter().filter(|a| a.ty != T_ATTRLIST) {
+            if let (Some(m), true) = (merged.iter_mut().find(|m| m.ty == a.ty && m.name == a.name && m.nr.is_some()), a.nr.is_some()) {
+                let (mn, an) = (m.nr.as_mut().unwrap(), a.nr.unwrap());
+                let first = an.runs.first().map(|r| r.vcn).unwrap_or(0);
+                if first == 0 { mn.alloc = an.alloc; mn.size = an.size; mn.init = an.init; mn.comp_unit = an.comp_unit; m.flags = a.flags; }
+                mn.runs.extend(an.runs);
+                mn.runs.sort_by_key(|r| r.vcn);
+            } else { merged.push(a); }
+        }
+        Ok(File { num: n, rec_flags, attrs: merged })
+    }
+
+    // ---- attribute data ----
+    pub(crate) fn read_all(&self, a: &Attr, limit: u64) -> Result<Vec<u8>> {
+        let sz = a.data_size();
+        if sz > limit { return Err(FsError::Corrupt("attribute too large")); }
+        let mut v = vec![0u8; sz as usize];
+        self.read_attr(a, 0, &mut v)?;
+        Ok(v)
+    }
+
+    /// Reads exactly `buf.len()` bytes at `off` (caller keeps the range within the data size).
+    pub(crate) fn read_attr(&self, a: &Attr, off: u64, buf: &mut [u8]) -> Result<()> {
+        if a.flags & 0x4000 != 0 { return Err(FsError::Unsupported("EFS-encrypted data")); }
+        if a.flags & 0x0001 != 0 { return Err(FsError::Unsupported("NTFS-compressed data")); }
+        if let Some(r) = &a.res {
+            let end = off as usize + buf.len();
+            if end > r.len() { return Err(FsError::Corrupt("read past resident data")); }
+            buf.copy_from_slice(&r[off as usize..end]);
+            return Ok(());
+        }
+        let nr = a.nr.as_ref().ok_or(FsError::Corrupt("empty attribute"))?;
+        let mut done = 0usize;
+        while done < buf.len() {
+            let pos = off + done as u64;
+            let vcn = pos / self.cs;
+            let idx = nr.runs.partition_point(|r| r.vcn + r.len <= vcn);
+            let r = nr.runs.get(idx).filter(|r| r.vcn <= vcn).ok_or(FsError::Corrupt("data run missing"))?;
+            let run_end = (r.vcn + r.len) * self.cs;
+            let n = ((run_end - pos) as usize).min(buf.len() - done);
+            match r.lcn {
+                None => buf[done..done + n].fill(0),
+                Some(l) => {
+                    let start = (l + (vcn - r.vcn)) * self.cs + pos % self.cs;
+                    if start + n as u64 > self.total_clusters * self.cs { return Err(FsError::Corrupt("data run outside volume")); }
+                    self.dev.read_at(start, &mut buf[done..done + n])?;
+                    // Bytes at or beyond the initialised size read as zero.
+                    if pos + n as u64 > nr.init {
+                        let z = nr.init.saturating_sub(pos).min(n as u64) as usize;
+                        buf[done + z..done + n].fill(0);
+                    }
+                }
+            }
+            done += n;
+        }
+        Ok(())
+    }
+
+    // ---- directories ----
+    pub(crate) fn name_eq(&self, a: &[u16], b: &[u16]) -> bool {
+        a.len() == b.len() && a.iter().zip(b).all(|(&x, &y)| self.upcase[x as usize] == self.upcase[y as usize])
+    }
+
+    fn index_unit(&self) -> u64 { if self.idx_size >= self.cs { self.cs } else { 512 } }
+
+    /// All (mft ref, FILE_NAME key) pairs of a directory, in index order.
+    pub(crate) fn dir_keys(&self, f: &File) -> Result<Vec<(u64, Vec<u8>)>> {
+        if !f.is_dir() { return Err(FsError::NotADirectory(format!("record {}", f.num))); }
+        let root = f.attr(T_INDEX_ROOT, "$I30").and_then(|a| a.res.as_ref()).ok_or(FsError::Corrupt("directory has no $I30 root"))?;
+        if root.len() < 32 || le32(root, 0) != 0x30 { return Err(FsError::Corrupt("bad index root")); }
+        let alloc = f.attr(T_INDEX_ALLOC, "$I30");
+        let mut out = Vec::new();
+        let mut budget = 1u32 << 22;
+        self.walk_node(&parse_node(root, 16)?, alloc, &mut out, 0, &mut budget)?;
+        Ok(out)
+    }
+
+    fn walk_node(&self, entries: &[IdxEntry], alloc: Option<&Attr>, out: &mut Vec<(u64, Vec<u8>)>, depth: u32, budget: &mut u32) -> Result<()> {
+        if depth > 32 { return Err(FsError::Corrupt("index too deep")); }
+        for e in entries {
+            if let Some(vcn) = e.child {
+                *budget = budget.checked_sub(1).ok_or(FsError::Corrupt("index walk too long"))?;
+                let a = alloc.ok_or(FsError::Corrupt("index has children but no $INDEX_ALLOCATION"))?;
+                let mut blk = vec![0u8; self.idx_size as usize];
+                let off = vcn.checked_mul(self.index_unit()).ok_or(FsError::Corrupt("index VCN overflow"))?;
+                if off + self.idx_size > a.data_size() { return Err(FsError::Corrupt("index block outside allocation")); }
+                self.read_attr(a, off, &mut blk)?;
+                if &blk[0..4] != b"INDX" { return Err(FsError::Corrupt("bad INDX signature")); }
+                let (uo, uc) = (le16(&blk, 4) as usize, le16(&blk, 6) as usize);
+                unfixup(&mut blk, uo, uc)?;
+                if le64(&blk, 16) != vcn { return Err(FsError::Corrupt("INDX VCN mismatch")); }
+                self.walk_node(&parse_node(&blk, 24)?, alloc, out, depth + 1, budget)?;
+            }
+            if e.flags & 2 == 0 { out.push((e.mref, e.key.clone())); }
+        }
+        Ok(())
+    }
+
+    fn entry_for(&self, mref: u64, name: &str) -> Result<Option<DirEntry>> {
+        let n = mref & MFT_MASK;
+        let f = match self.load_file(n) { Ok(f) => f, Err(FsError::NotFound(_)) => return Ok(None), Err(e) => return Err(e) };
+        let si = f.attr(T_STDINFO, "").and_then(|a| a.res.as_ref()).filter(|v| v.len() >= 48);
+        let (created, modified, flags) = match si { Some(v) => (filetime(le64(v, 0)), filetime(le64(v, 8)), le32(v, 32)), None => (None, None, 0) };
+        let dir = f.is_dir();
+        let size = if dir { 0 } else { f.attr(T_DATA, "").map(|a| a.data_size()).unwrap_or(0) };
+        Ok(Some(DirEntry {
+            name: name.to_string(), kind: if dir { EntryKind::Directory } else { EntryKind::File }, size,
+            modified, created, hidden: flags & 0x2 != 0 || n < 16 && n != ROOT_REC, read_only: flags & 0x1 != 0, inode: n,
+        }))
+    }
+
+    pub(crate) fn list_file(&self, dir: &File) -> Result<Vec<(String, Vec<u16>, u64)>> {
+        let mut v = Vec::new();
+        for (mref, key) in self.dir_keys(dir)? {
+            let Some(fnm) = parse_filename(&key) else { return Err(FsError::Corrupt("bad FILE_NAME in index")) };
+            if fnm.ns == 2 { continue; } // DOS-only short name; the Win32 name is listed separately
+            if fnm.name == "." { continue; } // a directory's self-reference (Windows root directories carry one)
+            if (mref & MFT_MASK) < 16 && (mref & MFT_MASK) != ROOT_REC { continue; } // $MFT, $Bitmap, ...
+            v.push((fnm.name, fnm.units, mref & MFT_MASK));
+        }
+        Ok(v)
+    }
+
+    pub(crate) fn find_in(&self, dir: &File, name: &str) -> Result<Option<(String, u64)>> {
+        let want: Vec<u16> = name.encode_utf16().collect();
+        Ok(self.list_file(dir)?.into_iter().find(|(_, u, _)| self.name_eq(u, &want)).map(|(n, _, r)| (n, r)))
+    }
+
+    pub(crate) fn walk_dir(&self, comps: &[&str]) -> Result<File> {
+        let mut cur = self.load_file(ROOT_REC)?;
+        for c in comps {
+            let (_, r) = self.find_in(&cur, c)?.ok_or_else(|| FsError::NotFound((*c).into()))?;
+            let next = self.load_file(r)?;
+            if !next.is_dir() { return Err(FsError::NotADirectory((*c).into())); }
+            cur = next;
+        }
+        Ok(cur)
+    }
+
+    fn cached(&self, n: u64) -> Result<Arc<File>> {
+        if let Some((i, f)) = &*self.cache.lock().unwrap() { if *i == n { return Ok(f.clone()); } }
+        let f = Arc::new(self.load_file(n)?);
+        *self.cache.lock().unwrap() = Some((n, f.clone()));
+        Ok(f)
+    }
+    pub fn write_blocked_reason(&self) -> Option<&'static str> { self.write_block }
+    pub(crate) fn invalidate(&self) { *self.cache.lock().unwrap() = None; }
+}
+
+impl Filesystem for NtfsFs {
+    fn name(&self) -> &'static str { "NTFS" }
+    fn label(&self) -> Option<String> { self.label.clone() }
+    fn capabilities(&self) -> Capabilities {
+        if self.dev.is_read_only() || self.write_block.is_some() { return Capabilities::READ_ONLY; }
+        Capabilities { read: true, write: true, create: true, delete: true, rename: true, permissions: false, symbolic_links: false, extended_attributes: false }
+    }
+
+    fn read_dir(&self, path: &str) -> Result<Vec<DirEntry>> {
+        let d = self.walk_dir(&normalize_path(path)?)?;
+        let mut out = Vec::new();
+        for (name, _, r) in self.list_file(&d)? { if let Some(e) = self.entry_for(r, &name)? { out.push(e); } }
+        Ok(out)
+    }
+
+    fn stat(&self, path: &str) -> Result<DirEntry> {
+        let comps = normalize_path(path)?;
+        let Some((last, parents)) = comps.split_last() else {
+            return self.entry_for(ROOT_REC, "/")?.ok_or(FsError::Corrupt("root directory missing"));
+        };
+        let d = self.walk_dir(parents)?;
+        let (n, r) = self.find_in(&d, last)?.ok_or_else(|| FsError::NotFound(path.into()))?;
+        self.entry_for(r, &n)?.ok_or_else(|| FsError::NotFound(path.into()))
+    }
+
+    fn read_at(&self, entry: &DirEntry, offset: u64, buf: &mut [u8]) -> Result<usize> {
+        if entry.kind == EntryKind::Directory { return Err(FsError::IsADirectory(entry.name.clone())); }
+        let f = self.cached(entry.inode)?;
+        let Some(a) = f.attr(T_DATA, "") else { return Ok(0) };
+        let size = a.data_size();
+        if offset >= size || buf.is_empty() { return Ok(0); }
+        let n = (buf.len() as u64).min(size - offset) as usize;
+        self.read_attr(a, offset, &mut buf[..n])?;
+        Ok(n)
+    }
+
+    fn write_blocked(&self) -> Option<&'static str> { self.write_block }
+
+    fn create_dir(&self, path: &str) -> Result<DirEntry> { self.w_create_dir(path) }
+    fn write_file(&self, path: &str, src: &mut dyn std::io::Read, overwrite: bool) -> Result<DirEntry> { self.w_write_file(path, src, overwrite) }
+    fn remove(&self, path: &str) -> Result<()> { self.w_remove(path) }
+    fn rename(&self, from: &str, to: &str) -> Result<()> { self.w_rename(from, to) }
+}
+
+mod write;
+
+// ---- Added for Ndaga Fijo: lets the staged writer copy only the clusters in use.
+impl NtfsFs {
+    /// (cluster size in bytes, clusters in the volume).
+    pub fn geometry(&self) -> (u64, u64) { (self.cs, self.total_clusters) }
+    /// Contents of `$Bitmap`: bit n set means cluster n is in use.
+    pub fn cluster_bitmap(&self) -> Result<Vec<u8>> {
+        let f = self.load_file(6)?;
+        let a = f.attr(T_DATA, "").ok_or(FsError::Corrupt("$Bitmap has no data"))?;
+        self.read_all(a, 1 << 30)
+    }
+}
