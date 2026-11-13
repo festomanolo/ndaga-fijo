@@ -1,3 +1,6 @@
+## Ndaga Fijo 1.1.0
+
+**New: NTFS drives, so Windows images with files over 4 GB work**
 ## Ndaga Fijo 1.0.0
 
 A native macOS bootable-USB creator (Apple Silicon + Intel, macOS 13+), based on Rufus.
