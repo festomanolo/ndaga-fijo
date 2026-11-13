@@ -31,5 +31,6 @@ cat > "$APP/Contents/Info.plist" <<PL
 <key>NSRemovableVolumesUsageDescription</key><string>Ndaga Fijo writes bootable images to removable drives.</string>
 </dict></plist>
 PL
-codesign --force --sign - "$APP" 2>/dev/null || true
+codesign --force --sign - "$APP/Contents/MacOS/mkntfs" "$APP/Contents/MacOS/ndaga-ntfs"
+codesign --force --sign - "$APP"
 echo "Built $APP"
