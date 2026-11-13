@@ -198,6 +198,13 @@ enum Helper {
         }
         if scanned.total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
 
+        if fs == "NTFS" {
+            try NtfsMedia.write(scan: scanned, source: srcRoot, drive: drive, gpt: scheme == "GPT",
+                                label: sanitizeLabel(label, fs: fs), rep: rep)
+            rep.log("Copied \(scanned.total) bytes")
+            return
+        }
+
         let vol = sanitizeLabel(label, fs: fs)
         rep.progress(0.05, "Formatting as \(fs) (\(scheme))...")
         let er = Shell.diskutil(["eraseDisk", fs, vol, scheme, drive.id])
