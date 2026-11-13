@@ -67,6 +67,8 @@ impl Progress {
 
 /// fsync for files; device nodes don't take fsync (ENOTTY), so ask the disk to flush its cache instead.
 fn flush(f: &std::fs::File) -> Res<()> {
+    match f.sync_all() {
+        Ok(()) => Ok(()),
 // ---------------------------------------------------------------- copy
 
 struct Tree { dirs: Vec<String>, files: Vec<(PathBuf, String, u64)>, total: u64 }
