@@ -1,0 +1,10 @@
+[package]
+name = "fs-ntfs"
+version = "0.1.1"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+block-device = { path = "../block-device" }
+fs-core = { path = "../fs-core" }
+
