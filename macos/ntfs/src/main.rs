@@ -75,6 +75,7 @@ fn flush(f: &std::fs::File) -> Res<()> {
             Ok(())
         }
         Err(e) => Err(format!("flush failed: {e}")),
+    }
 // ---------------------------------------------------------------- copy
 
 struct Tree { dirs: Vec<String>, files: Vec<(PathBuf, String, u64)>, total: u64 }
