@@ -41,6 +41,6 @@ A native macOS bootable-USB creator (Apple Silicon + Intel, macOS 13+), based on
 
 **Not verified yet:** booting the written drives on real PCs (UEFI and legacy BIOS), and Windows Setup reading the split `.swm` files. Please report results in an issue.
 
-**Not supported:** NTFS/UEFI:NTFS, Windows To Go, Windows setup customization, bad-block checks, BIOS boot for non-hybrid Linux ISOs.
+**Not supported (in 1.0.0):** NTFS/UEFI:NTFS, Windows To Go, Windows setup customization, bad-block checks, BIOS boot for non-hybrid Linux ISOs.
 
 SHA-256 checksums are in `SHA256SUMS.txt`.
