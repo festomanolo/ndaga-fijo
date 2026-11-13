@@ -1,0 +1,10 @@
+[package]
+name = "fs-core"
+version = "0.1.1"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+thiserror = "2"
+serde = { version = "1", features = ["derive"] }
+block-device = { path = "../block-device" }
