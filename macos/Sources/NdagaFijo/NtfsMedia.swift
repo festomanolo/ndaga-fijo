@@ -59,8 +59,10 @@ enum NtfsMedia {
         let need = scan.total + UInt64(scan.files.count + scan.dirs.count) * 4096 + partBytes / 50 + (96 << 20)
         guard need < partBytes else { throw Failure(message: "The image contents do not fit on the drive as NTFS. The drive was not modified.") }
 
-        let staged = !Staging.disabled && Staging.hasRoom(for: scan.total)
-        let img = "/private/var/tmp/ndagafijo-\(UUID().uuidString)-ntfs.img"
+        // Stage on the system disk, or on the ISO's own volume when the system disk is short of space.
+        let stageDir = Staging.disabled ? nil : Staging.directory(for: scan.total, near: image)
+        let staged = stageDir != nil
+        let img = ((stageDir ?? "/private/var/tmp") as NSString).appendingPathComponent(".ndagafijo-\(UUID().uuidString)-ntfs.img")
         let sfd = open(img, O_RDWR | O_CREAT | O_EXCL, 0o600)
         guard sfd >= 0 else { throw Failure(message: "Cannot create the staging image") }
         defer { unlink(img) }
