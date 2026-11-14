@@ -82,7 +82,7 @@ enum NtfsMedia {
         try Helper.unmount(drive, rep)
         try zeroOldTables(drive: drive, L: L)
         if staged {
-            rep.log("Using the fast path: copy into a staged NTFS image, then one sequential write")
+            rep.log("Using the fast path: copy into a staged NTFS image in \(stageDir!), then one sequential write with parallel writers")
             try runTool(["copy", "--target", img, "--src", source.path], rep: rep, from: 0.08, to: 0.45, label: "Copying")
             try Helper.unmount(drive, rep)
             try runTool(["stream", "--image", img, "--target", drive.rawPath, "--offset", String(base)],
