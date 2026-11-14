@@ -10,3 +10,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 - NTFS tools only: `macos/ntfs/build.sh [OUT]` (default `macos/build/tools`); first run downloads ntfs-3g once into `ntfs/.cache`.
 - Rust unit tests: `cd macos/ntfs && cargo test --release` (includes the FastDevice model test).
 - If `swift build` fails with "precompiled file ... was compiled with module cache path .../rufus-master/...",
+  the project folder was renamed: delete the `ModuleCache` dirs under `macos/.build` (or all of `.build`).
+- Never test writes against a real drive. Use disk images: `NDAGA_ALLOW_DISK_IMAGES=1` lists
+  `hdiutil attach -nomount` images in the app. For `ndaga-ntfs`, attach a file with
