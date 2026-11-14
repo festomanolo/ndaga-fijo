@@ -228,8 +228,8 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
     println!("L Streaming {total} bytes in {} extents to {target}", rs.len());
 
     let src = std::fs::File::open(image).map_err(|e| e.to_string())?;
-    let dst = std::fs::OpenOptions::new().write(true).custom_flags(0).open(target).map_err(|e| format!("cannot open {target}: {e}"))?;
-    unsafe { libc::fcntl(dst.as_raw_fd(), libc::F_NOCACHE, 1); }
+    let writers = fastdev::writer_count();
+    let dst = FastDevice::open(target, offset, Some(image_len), writers)?;
     use std::os::unix::fs::FileExt;
     const BUF: usize = 8 << 20;
     // Raw devices want sector-aligned buffers.
