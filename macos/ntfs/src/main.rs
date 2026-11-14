@@ -172,14 +172,16 @@ fn copy(o: &HashMap<String, String>) -> Res<()> {
     if let Some(why) = fs.write_blocked() { return Err(format!("the NTFS volume cannot be written: {why}")); }
 
     let tree = walk(&src)?;
-    println!("L Copying {} files in {} folders ({} bytes) with the VOLUMA NTFS driver", tree.files.len(), tree.dirs.len(), tree.total);
+    println!("L Copying {} files in {} folders ({} bytes) with the VOLUMA NTFS driver, {writers} parallel writers",
+             tree.files.len(), tree.dirs.len(), tree.total);
+    let started = Instant::now();
     let mut p = Progress::new(tree.total);
     for d in &tree.dirs {
         fs.create_dir(d).map_err(|e| format!("cannot create folder {d}: {e}"))?;
     }
-    for (path, rel, _) in &tree.files {
-        let f = std::fs::File::open(path).map_err(|e| format!("cannot read {rel}: {e}"))?;
-        let mut r = Counting { inner: std::io::BufReader::with_capacity(1 << 20, f), p: &mut p, name: rel };
+    let rx = prefetch(tree.files.iter().map(|f| f.0.clone()).collect(), 16);
+    for (_, rel, _) in &tree.files {
+        let mut r = Prefetched { rx: &rx, cur: Vec::new(), pos: 0, done: false, p: &mut p, name: rel };
         fs.write_file(rel, &mut r, false).map_err(|e| format!("cannot write {rel}: {e}"))?;
     }
     drop(fs);
