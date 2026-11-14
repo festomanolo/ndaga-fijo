@@ -70,19 +70,6 @@ impl Progress {
     }
 }
 
-/// fsync for files; device nodes don't take fsync (ENOTTY), so ask the disk to flush its cache instead.
-fn flush(f: &std::fs::File) -> Res<()> {
-    match f.sync_all() {
-        Ok(()) => Ok(()),
-        Err(e) if e.raw_os_error() == Some(libc::ENOTTY) || e.raw_os_error() == Some(libc::ENODEV) => {
-            const DKIOCSYNCHRONIZECACHE: libc::c_ulong = 0x2000_6416;
-            unsafe { libc::ioctl(f.as_raw_fd(), DKIOCSYNCHRONIZECACHE) };
-            Ok(())
-        }
-        Err(e) => Err(format!("flush failed: {e}")),
-    }
-}
-
 // ---------------------------------------------------------------- copy
 
 struct Tree { dirs: Vec<String>, files: Vec<(PathBuf, String, u64)>, total: u64 }
