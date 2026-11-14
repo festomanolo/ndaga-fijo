@@ -8,7 +8,7 @@
  *   partition 1: NTFS, all of the drive but the last MiB, with the ms-sys NTFS boot record (legacy BIOS);
  *   partition 2: UEFI:NTFS, a 1 MiB FAT image whose signed loader lets UEFI firmware boot from partition 1.
  * Steps: `mkntfs` (ntfs-3g) formats a sparse image on the Mac, `ndaga-ntfs` (VOLUMA's NTFS driver) copies
- * the files into it, then only its in-use clusters are streamed to the drive. The partition table is
+ * the files into it, then only its in-use clusters are streamed to the drive by parallel writer threads. The partition table is
  * written last, so a failure part way leaves no half-made volume for macOS to mount.
  */
 import Foundation
