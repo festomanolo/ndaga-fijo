@@ -19,8 +19,6 @@ use fs_core::Filesystem;
 use fs_ntfs::NtfsFs;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
