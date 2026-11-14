@@ -8,7 +8,7 @@
  *   partition 1: NTFS, all of the drive but the last MiB, with the ms-sys NTFS boot record (legacy BIOS);
  *   partition 2: UEFI:NTFS, a 1 MiB FAT image whose signed loader lets UEFI firmware boot from partition 1.
  * Steps: `mkntfs` (ntfs-3g) formats a sparse image on the Mac, `ndaga-ntfs` (VOLUMA's NTFS driver) copies
- * the files into it, then only its in-use clusters are streamed to the drive. The partition table is
+ * the files into it, then only its in-use clusters are streamed to the drive by parallel writer threads. The partition table is
  * written last, so a failure part way leaves no half-made volume for macOS to mount.
  */
 import Foundation
@@ -46,7 +46,7 @@ enum NtfsMedia {
         }
     }
 
-    static func write(scan: TreeCopy.Scan, source: URL, drive: Drive, gpt: Bool, label: String, rep: Reporter) throws {
+    static func write(scan: TreeCopy.Scan, source: URL, image: String? = nil, drive: Drive, gpt: Bool, label: String, rep: Reporter) throws {
         if !missingTools.isEmpty { throw Failure(message: "NTFS support files are missing from the app (\(missingTools.joined(separator: ", "))). The drive was not modified.") }
         let uefi = try Data(contentsOf: URL(fileURLWithPath: tool("uefi-ntfs.img")))
         guard uefi.count > 0, uefi.count % 512 == 0 else { throw Failure(message: "Bad UEFI:NTFS image") }
@@ -59,8 +59,10 @@ enum NtfsMedia {
         let need = scan.total + UInt64(scan.files.count + scan.dirs.count) * 4096 + partBytes / 50 + (96 << 20)
         guard need < partBytes else { throw Failure(message: "The image contents do not fit on the drive as NTFS. The drive was not modified.") }
 
-        let staged = !Staging.disabled && Staging.hasRoom(for: scan.total)
-        let img = "/private/var/tmp/ndagafijo-\(UUID().uuidString)-ntfs.img"
+        // Stage on the system disk, or on the ISO's own volume when the system disk is short of space.
+        let stageDir = Staging.disabled ? nil : Staging.directory(for: scan.total, near: image)
+        let staged = stageDir != nil
+        let img = ((stageDir ?? "/private/var/tmp") as NSString).appendingPathComponent(".ndagafijo-\(UUID().uuidString)-ntfs.img")
         let sfd = open(img, O_RDWR | O_CREAT | O_EXCL, 0o600)
         guard sfd >= 0 else { throw Failure(message: "Cannot create the staging image") }
         defer { unlink(img) }
@@ -80,18 +82,19 @@ enum NtfsMedia {
         try Helper.unmount(drive, rep)
         try zeroOldTables(drive: drive, L: L)
         if staged {
-            rep.log("Using the fast path: copy into a staged NTFS image, then one sequential write")
+            rep.log("Using the fast path: copy into a staged NTFS image in \(stageDir!), then one sequential write with parallel writers")
             try runTool(["copy", "--target", img, "--src", source.path], rep: rep, from: 0.08, to: 0.45, label: "Copying")
             try Helper.unmount(drive, rep)
             try runTool(["stream", "--image", img, "--target", drive.rawPath, "--offset", String(base)],
                         rep: rep, from: 0.45, to: 0.98, label: "Writing to the drive")
         } else {
-            rep.log(Staging.disabled ? "Staging is off (NDAGA_NO_STAGING), writing to the drive directly (slower)" : "Not enough free space on this Mac to stage the image, writing to the drive directly (slower)")
+            rep.log(Staging.disabled ? "Staging is off (NDAGA_NO_STAGING), writing to the drive directly" : "Not enough free space on this Mac to stage the image, writing to the drive directly")
             try runTool(["stream", "--image", img, "--target", drive.rawPath, "--offset", String(base)],
                         rep: rep, from: 0.07, to: 0.08, label: "Writing NTFS metadata")
             try Helper.unmount(drive, rep)
-            // The buffered node (/dev/diskN) takes the driver's small unaligned metadata writes.
-            try runTool(["copy", "--target", "/dev/\(drive.id)", "--offset", String(base), "--length", String(partBytes),
+            // ndaga-ntfs keeps the driver's small metadata writes in memory until the end and sends file data in
+            // large aligned batches on parallel writers, so the raw node (much faster than /dev/diskN) works.
+            try runTool(["copy", "--target", drive.rawPath, "--offset", String(base), "--length", String(partBytes),
                          "--src", source.path], rep: rep, from: 0.08, to: 0.98, label: "Copying")
         }
 

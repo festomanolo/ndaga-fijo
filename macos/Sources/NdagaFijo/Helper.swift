@@ -199,7 +199,7 @@ enum Helper {
         if scanned.total > drive.size { throw HelperError(message: "The image contents do not fit on the drive. The drive was not modified.") }
 
         if fs == "NTFS" {
-            try NtfsMedia.write(scan: scanned, source: srcRoot, drive: drive, gpt: scheme == "GPT",
+            try NtfsMedia.write(scan: scanned, source: srcRoot, image: image, drive: drive, gpt: scheme == "GPT",
                                 label: sanitizeLabel(label, fs: fs), rep: rep)
             rep.log("Copied \(scanned.total) bytes")
             return

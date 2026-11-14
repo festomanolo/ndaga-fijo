@@ -5,17 +5,22 @@
 //!   ndaga-ntfs stream --image IMG --target DEV --offset N
 //!       Writes only the clusters in use (per $Bitmap), plus the backup boot sector, of a staged NTFS image to DEV.
 //!
+//! Both write through FastDevice (src/fastdev.rs): metadata is cached and written once at the end, file data
+//! goes out in large batches on parallel writer threads, and source files are read ahead on another thread.
+//!
 //! Progress goes to stdout as `P <done> <total> <name>` lines, logs as `L <text>`, errors to stderr.
 //! Licensed under the GNU GPL v3 or later; the vendored driver crates are MIT (see vendor/).
 
-use block_device::{BlockDevice, ImageDevice, PartitionWindow};
+mod fastdev;
+
+use block_device::{BlockDevice, ImageDevice};
+use fastdev::{AlignedBuf, FastDevice};
 use fs_core::Filesystem;
 use fs_ntfs::NtfsFs;
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
-use std::os::unix::io::AsRawFd;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -65,19 +70,6 @@ impl Progress {
     }
 }
 
-/// fsync for files; device nodes don't take fsync (ENOTTY), so ask the disk to flush its cache instead.
-fn flush(f: &std::fs::File) -> Res<()> {
-    match f.sync_all() {
-        Ok(()) => Ok(()),
-        Err(e) if e.raw_os_error() == Some(libc::ENOTTY) || e.raw_os_error() == Some(libc::ENODEV) => {
-            const DKIOCSYNCHRONIZECACHE: libc::c_ulong = 0x2000_6416;
-            unsafe { libc::ioctl(f.as_raw_fd(), DKIOCSYNCHRONIZECACHE) };
-            Ok(())
-        }
-        Err(e) => Err(format!("flush failed: {e}")),
-    }
-}
-
 // ---------------------------------------------------------------- copy
 
 struct Tree { dirs: Vec<String>, files: Vec<(PathBuf, String, u64)>, total: u64 }
@@ -103,46 +95,101 @@ fn walk(root: &Path) -> Res<Tree> {
     Ok(t)
 }
 
-struct Counting<'a, R: Read> { inner: R, p: &'a mut Progress, name: &'a str }
-impl<R: Read> Read for Counting<'_, R> {
+/// What the prefetch thread hands over, in file order: chunks of a file, then its end (or a read error).
+enum Chunk { Data(Vec<u8>), End, Fail(String) }
+const READ_CHUNK: usize = 4 << 20;
+
+/// Reads every file of the tree, in order, ahead of the driver, so source reads overlap device writes.
+/// At most `depth` chunks wait in memory.
+fn prefetch(files: Vec<PathBuf>, depth: usize) -> Receiver<Chunk> {
+    let (tx, rx) = sync_channel(depth);
+    std::thread::spawn(move || {
+        for path in files {
+            let mut f = match std::fs::File::open(&path) {
+                Ok(f) => f,
+                Err(e) => { let _ = tx.send(Chunk::Fail(e.to_string())); continue; }
+            };
+            loop {
+                let mut b = vec![0u8; READ_CHUNK];
+                let mut got = 0;
+                let r = loop {
+                    match f.read(&mut b[got..]) {
+                        Ok(0) => break Ok(()),
+                        Ok(n) => { got += n; if got == b.len() { break Ok(()); } }
+                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                        Err(e) => break Err(e),
+                    }
+                };
+                if let Err(e) = r { let _ = tx.send(Chunk::Fail(e.to_string())); break; }
+                b.truncate(got);
+                let last = got < READ_CHUNK;
+                if got > 0 && tx.send(Chunk::Data(b)).is_err() { return; }
+                if last { if tx.send(Chunk::End).is_err() { return; } break; }
+            }
+        }
+    });
+    rx
+}
+
+/// One file's data, as the prefetch thread delivers it.
+struct Prefetched<'a> { rx: &'a Receiver<Chunk>, cur: Vec<u8>, pos: usize, done: bool, p: &'a mut Progress, name: &'a str }
+impl Read for Prefetched<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
+        while self.pos == self.cur.len() {
+            if self.done { return Ok(0); }
+            match self.rx.recv() {
+                Ok(Chunk::Data(d)) => { self.cur = d; self.pos = 0; }
+                Ok(Chunk::End) => { self.done = true; return Ok(0); }
+                Ok(Chunk::Fail(e)) => { self.done = true; return Err(std::io::Error::other(e)); }
+                Err(_) => return Err(std::io::Error::other("source reader stopped")),
+            }
+        }
+        let n = buf.len().min(self.cur.len() - self.pos);
+        buf[..n].copy_from_slice(&self.cur[self.pos..self.pos + n]);
+        self.pos += n;
         self.p.add(n as u64, self.name);
         Ok(n)
+    }
+}
+impl Prefetched<'_> {
+    /// Consumes whatever of this file the driver did not read, so the next file starts in step.
+    fn drain(&mut self) -> std::io::Result<()> {
+        let mut sink = [0u8; 65536];
+        while self.read(&mut sink)? > 0 {}
+        Ok(())
     }
 }
 
 fn copy(o: &HashMap<String, String>) -> Res<()> {
     let target = req(o, "target")?;
     let src = PathBuf::from(req(o, "src")?);
-    let dev: Arc<dyn BlockDevice> = Arc::new(ImageDevice::open_read_write(target).map_err(|e| format!("cannot open {target}: {e}"))?);
-    let dev: Arc<dyn BlockDevice> = match num(o, "offset")? {
-        Some(off) => {
-            let len = num(o, "length")?.ok_or("--offset needs --length")?;
-            Arc::new(PartitionWindow::new(dev, off, len).map_err(|e| e.to_string())?)
-        }
-        None => dev,
-    };
+    let off = num(o, "offset")?.unwrap_or(0);
+    let len = match num(o, "offset")? { Some(_) => Some(num(o, "length")?.ok_or("--offset needs --length")?), None => None };
+    let writers = fastdev::writer_count();
+    let fast = FastDevice::open(target, off, len, writers)?;
+    let dev: Arc<dyn BlockDevice> = fast.clone();
     let fs = NtfsFs::open(dev).map_err(|e| format!("not a usable NTFS volume: {e}"))?;
     if let Some(why) = fs.write_blocked() { return Err(format!("the NTFS volume cannot be written: {why}")); }
 
     let tree = walk(&src)?;
-    println!("L Copying {} files in {} folders ({} bytes) with the VOLUMA NTFS driver", tree.files.len(), tree.dirs.len(), tree.total);
+    println!("L Copying {} files in {} folders ({} bytes) with the VOLUMA NTFS driver, {writers} parallel writers",
+             tree.files.len(), tree.dirs.len(), tree.total);
+    let started = Instant::now();
     let mut p = Progress::new(tree.total);
     for d in &tree.dirs {
         fs.create_dir(d).map_err(|e| format!("cannot create folder {d}: {e}"))?;
     }
-    for (path, rel, _) in &tree.files {
-        let f = std::fs::File::open(path).map_err(|e| format!("cannot read {rel}: {e}"))?;
-        let mut r = Counting { inner: std::io::BufReader::with_capacity(1 << 20, f), p: &mut p, name: rel };
+    let rx = prefetch(tree.files.iter().map(|f| f.0.clone()).collect(), 16);
+    for (_, rel, _) in &tree.files {
+        let mut r = Prefetched { rx: &rx, cur: Vec::new(), pos: 0, done: false, p: &mut p, name: rel };
         fs.write_file(rel, &mut r, false).map_err(|e| format!("cannot write {rel}: {e}"))?;
+        r.drain().map_err(|e| format!("cannot read {rel}: {e}"))?;
     }
     drop(fs);
-    // Flush whatever the OS still buffers for the target (block device or image file).
-    let f = std::fs::OpenOptions::new().write(true).open(target).map_err(|e| format!("cannot reopen {target}: {e}"))?;
-    flush(&f)?;
+    println!("P {} {} finishing", p.total, p.total);
+    fast.finish()?;
     println!("P {} {} done", p.total, p.total);
-    println!("L Copied {} files", tree.files.len());
+    println!("L Copied {} files in {:.0}s ({})", tree.files.len(), started.elapsed().as_secs_f64(), fast.summary());
     Ok(())
 }
 
@@ -181,27 +228,28 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
     println!("L Streaming {total} bytes in {} extents to {target}", rs.len());
 
     let src = std::fs::File::open(image).map_err(|e| e.to_string())?;
-    let dst = std::fs::OpenOptions::new().write(true).custom_flags(0).open(target).map_err(|e| format!("cannot open {target}: {e}"))?;
-    unsafe { libc::fcntl(dst.as_raw_fd(), libc::F_NOCACHE, 1); }
+    let writers = fastdev::writer_count();
+    let dst = FastDevice::open(target, offset, Some(image_len), writers)?;
     use std::os::unix::fs::FileExt;
-    const BUF: usize = 8 << 20;
-    // Raw devices want sector-aligned buffers.
-    let mut store = vec![0u8; BUF + 4096];
-    let pad = store.as_ptr().align_offset(4096);
-    let buf = &mut store[pad..pad + BUF];
+    // Reads from the image (on the Mac's disk) overlap the parallel writes to the drive.
+    let mut buf = AlignedBuf::new(fastdev::BATCH);
     let mut p = Progress::new(total);
+    let started = Instant::now();
     for (s, e) in rs {
         let mut at = s;
         while at < e {
-            let n = ((e - at) as usize).min(BUF);
-            src.read_exact_at(&mut buf[..n], at).map_err(|er| format!("image read error at {at}: {er}"))?;
-            dst.write_all_at(&buf[..n], offset + at).map_err(|er| format!("device write error at {}: {er}", offset + at))?;
+            let n = ((e - at) as usize).min(fastdev::BATCH);
+            buf.set_len(n);
+            src.read_exact_at(buf.as_mut_slice(), at).map_err(|er| format!("image read error at {at}: {er}"))?;
+            dst.write_at(at, buf.as_slice()).map_err(|er| format!("device write error near {}: {er}", offset + at))?;
             at += n as u64;
-            p.add(n as u64, "");
+            let w = dst.written();                     // bytes on the drive, not just queued
+            if w > p.done { p.add(w - p.done, ""); }
         }
     }
-    flush(&dst)?;
+    dst.finish()?;
     println!("P {total} {total} done");
+    println!("L Streamed in {:.0}s with {writers} parallel writers ({})", started.elapsed().as_secs_f64(), dst.summary());
     Ok(())
 }
 

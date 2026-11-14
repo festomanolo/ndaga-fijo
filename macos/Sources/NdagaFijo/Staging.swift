@@ -20,11 +20,32 @@ enum Staging {
     private static func le32(_ b: [UInt8], _ o: Int) -> Int { le16(b, o) | le16(b, o + 2) << 16 }
 
     /// Space needed on the Mac for the staging image: file contents plus FAT overhead.
-    static func hasRoom(for total: UInt64) -> Bool {
+    static func hasRoom(for total: UInt64) -> Bool { hasRoom(for: total, in: "/private/var/tmp") }
+
+    static func hasRoom(for total: UInt64, in dir: String) -> Bool { freeSpace(dir).map { $0 > total + total / 8 + (512 << 20) } ?? false }
+
+    /// Free bytes on a local, writable volume (nil for read-only, network or missing ones).
+    static func freeSpace(_ dir: String) -> UInt64? {
         var st = statfs()
-        guard statfs("/private/var/tmp", &st) == 0 else { return false }
-        let avail = UInt64(st.f_bavail) * UInt64(st.f_bsize)
-        return avail > total + total / 8 + (512 << 20)
+        guard statfs(dir, &st) == 0, st.f_flags & UInt32(MNT_LOCAL) != 0, st.f_flags & UInt32(MNT_RDONLY) == 0 else { return nil }
+        return UInt64(st.f_bavail) * UInt64(st.f_bsize)
+    }
+
+    /// True for APFS, the only macOS file system that keeps a drive-sized staging image sparse.
+    static func isAPFS(_ dir: String) -> Bool {
+        var st = statfs()
+        guard statfs(dir, &st) == 0 else { return false }
+        let name = withUnsafeBytes(of: st.f_fstypename) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        return name == "apfs"
+    }
+
+    /// Where to stage `total` bytes: the system temp folder, or else the (APFS) volume the image file sits on,
+    /// often a data disk with more room. nil when neither has space.
+    static func directory(for total: UInt64, near image: String?) -> String? {
+        if hasRoom(for: total, in: "/private/var/tmp") { return "/private/var/tmp" }
+        guard let image else { return nil }
+        let d = (URL(fileURLWithPath: image).resolvingSymlinksInPath().path as NSString).deletingLastPathComponent
+        return !d.isEmpty && isAPFS(d) && hasRoom(for: total, in: d) ? d : nil
     }
 
     /// Returns false (without having touched the stick's contents) if the staged route can't be used.

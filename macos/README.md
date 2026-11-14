@@ -38,8 +38,16 @@ Requires Xcode command line tools (Swift 5.9+), macOS 13+, and Rust (with the `a
   streamed to the drive. The drive gets Rufus' layout: the NTFS partition, plus a 1 MB **UEFI:NTFS** partition
   (`res/uefi/uefi-ntfs.img`, Secure Boot signed) at the end, which lets UEFI firmware boot from NTFS. On MBR the
   Windows 7 MBR and the ms-sys NTFS boot record are installed too, for legacy BIOS. The partition table is written
-  last, so a failed job never leaves a half-made volume. If the Mac lacks room for the staging image, files are
-  written to the drive directly instead. macOS mounts the result read-only, which is normal for NTFS.
+  last, so a failed job never leaves a half-made volume. The staging image goes in `/private/var/tmp`, or on the
+  ISO's own APFS volume when the system disk is short of space; if neither has room, files are written to the drive
+  directly instead.
+* **Parallel NTFS writes:** `ndaga-ntfs` puts its own block layer (`ntfs/src/fastdev.rs`) under the driver. The
+  driver's small scattered metadata writes (MFT records, `$Bitmap`, index blocks, the dirty flag set and cleared
+  around every file) stay in a RAM write-back cache and go out once at the end, sorted and merged; file data is
+  coalesced into 8 MB batches written by 4 parallel threads (`NDAGA_NTFS_WRITERS=1..16` to tune), while another
+  thread reads the next source files ahead. Interleaving tiny metadata writes with data used to make USB flash
+  rewrite whole erase blocks, which is what made the direct path crawl at a few MB/s. All I/O is 4 KB-aligned, so
+  the direct path now uses the raw `/dev/rdiskN` node too. The log reports how many device writes each phase took. macOS mounts the result read-only, which is normal for NTFS.
 * **Speed:** copying thousands of files through the macOS FAT driver onto a USB stick is dominated by slow per-file
   metadata writes (34 min for the 6,959-file Windows XP ISO in our test, against 67 s for a raw write of the same bytes).
   For FAT32, Ndaga Fijo formats the stick, clones its FAT geometry into a sparse image on the Mac's SSD, copies the files
