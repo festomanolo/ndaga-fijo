@@ -11,7 +11,10 @@
 //! Progress goes to stdout as `P <done> <total> <name>` lines, logs as `L <text>`, errors to stderr.
 //! Licensed under the GNU GPL v3 or later; the vendored driver crates are MIT (see vendor/).
 
-use block_device::{BlockDevice, ImageDevice, PartitionWindow};
+mod fastdev;
+
+use block_device::{BlockDevice, ImageDevice};
+use fastdev::{AlignedBuf, FastDevice};
 use fs_core::Filesystem;
 use fs_ntfs::NtfsFs;
 use std::collections::HashMap;
