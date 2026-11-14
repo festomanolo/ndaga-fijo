@@ -92,8 +92,9 @@ enum NtfsMedia {
             try runTool(["stream", "--image", img, "--target", drive.rawPath, "--offset", String(base)],
                         rep: rep, from: 0.07, to: 0.08, label: "Writing NTFS metadata")
             try Helper.unmount(drive, rep)
-            // The buffered node (/dev/diskN) takes the driver's small unaligned metadata writes.
-            try runTool(["copy", "--target", "/dev/\(drive.id)", "--offset", String(base), "--length", String(partBytes),
+            // ndaga-ntfs keeps the driver's small metadata writes in memory until the end and sends file data in
+            // large aligned batches on parallel writers, so the raw node (much faster than /dev/diskN) works.
+            try runTool(["copy", "--target", drive.rawPath, "--offset", String(base), "--length", String(partBytes),
                          "--src", source.path], rep: rep, from: 0.08, to: 0.98, label: "Copying")
         }
 
