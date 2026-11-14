@@ -151,6 +151,14 @@ impl Read for Prefetched<'_> {
         Ok(n)
     }
 }
+impl Prefetched<'_> {
+    /// Consumes whatever of this file the driver did not read, so the next file starts in step.
+    fn drain(&mut self) -> std::io::Result<()> {
+        let mut sink = [0u8; 65536];
+        while self.read(&mut sink)? > 0 {}
+        Ok(())
+    }
+}
 
 fn copy(o: &HashMap<String, String>) -> Res<()> {
     let target = req(o, "target")?;
