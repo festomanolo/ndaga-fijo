@@ -19,3 +19,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 ## Layout
 
 - `macos/Sources/NdagaFijo/`: `Helper.swift` (root helper: DD and ISO modes, FS auto-pick: FAT32 -> NTFS when a
+  file is over 4 GB, except `install.wim`, which `WimSplit.swift` splits), `NtfsMedia.swift` (NTFS + UEFI:NTFS
+  layout, partition tables written last), `Staging.swift` (staged FAT32 writer and staging-location choice),
+  `FastIO.swift` (pipelined DD copy), `BootCode.swift`/`BiosBoot.swift` (ms-sys boot records).
