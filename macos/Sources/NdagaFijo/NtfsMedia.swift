@@ -46,7 +46,7 @@ enum NtfsMedia {
         }
     }
 
-    static func write(scan: TreeCopy.Scan, source: URL, drive: Drive, gpt: Bool, label: String, rep: Reporter) throws {
+    static func write(scan: TreeCopy.Scan, source: URL, image: String? = nil, drive: Drive, gpt: Bool, label: String, rep: Reporter) throws {
         if !missingTools.isEmpty { throw Failure(message: "NTFS support files are missing from the app (\(missingTools.joined(separator: ", "))). The drive was not modified.") }
         let uefi = try Data(contentsOf: URL(fileURLWithPath: tool("uefi-ntfs.img")))
         guard uefi.count > 0, uefi.count % 512 == 0 else { throw Failure(message: "Bad UEFI:NTFS image") }
