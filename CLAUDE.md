@@ -13,3 +13,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
   the project folder was renamed: delete the `ModuleCache` dirs under `macos/.build` (or all of `.build`).
 - Never test writes against a real drive. Use disk images: `NDAGA_ALLOW_DISK_IMAGES=1` lists
   `hdiutil attach -nomount` images in the app. For `ndaga-ntfs`, attach a file with
+  `hdiutil attach -nomount -imagekey diskimage-class=CRawDiskImage disk.img` and target `/dev/rdiskN`;
+  check results with the ntfs-3g tools (`NTFS3G_TOOLS=1 ntfs/build.sh` keeps `ntfsinfo`/`ntfsls`/`ntfscat`).
+
