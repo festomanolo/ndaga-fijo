@@ -28,3 +28,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 
 ## NTFS write path (performance-critical)
 
+- Staged (normal): mkntfs formats a sparse image, `ndaga-ntfs copy` fills it, `ndaga-ntfs stream` writes only
+  in-use clusters to the drive. The image goes in `/private/var/tmp`, or on the ISO's own volume if that is APFS
+  (needed for sparse files) and the system disk lacks room (`Staging.directory(for:near:)`).
