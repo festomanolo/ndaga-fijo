@@ -231,11 +231,8 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
     let writers = fastdev::writer_count();
     let dst = FastDevice::open(target, offset, Some(image_len), writers)?;
     use std::os::unix::fs::FileExt;
-    const BUF: usize = 8 << 20;
-    // Raw devices want sector-aligned buffers.
-    let mut store = vec![0u8; BUF + 4096];
-    let pad = store.as_ptr().align_offset(4096);
-    let buf = &mut store[pad..pad + BUF];
+    // Reads from the image (on the Mac's disk) overlap the parallel writes to the drive.
+    let mut buf = AlignedBuf::new(fastdev::BATCH);
     let mut p = Progress::new(total);
     for (s, e) in rs {
         let mut at = s;
