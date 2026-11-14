@@ -25,3 +25,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 - `macos/ntfs/`: `ndaga-ntfs` Rust CLI (`copy`, `stream`; prints `P done total name` progress and `L text` log lines,
   which `NtfsMedia.runTool` parses). `src/fastdev.rs` is the block layer under the driver.
   `vendor/` holds VOLUMA's NTFS driver crates (MIT): avoid changing them; put new behaviour in `src/`.
+
+## NTFS write path (performance-critical)
+
