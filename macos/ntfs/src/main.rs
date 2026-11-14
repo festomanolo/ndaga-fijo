@@ -20,6 +20,7 @@ use fs_ntfs::NtfsFs;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{sync_channel, Receiver};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
