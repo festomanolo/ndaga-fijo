@@ -95,8 +95,45 @@ fn walk(root: &Path) -> Res<Tree> {
     Ok(t)
 }
 
-struct Counting<'a, R: Read> { inner: R, p: &'a mut Progress, name: &'a str }
-impl<R: Read> Read for Counting<'_, R> {
+/// What the prefetch thread hands over, in file order: chunks of a file, then its end (or a read error).
+enum Chunk { Data(Vec<u8>), End, Fail(String) }
+const READ_CHUNK: usize = 4 << 20;
+
+/// Reads every file of the tree, in order, ahead of the driver, so source reads overlap device writes.
+/// At most `depth` chunks wait in memory.
+fn prefetch(files: Vec<PathBuf>, depth: usize) -> Receiver<Chunk> {
+    let (tx, rx) = sync_channel(depth);
+    std::thread::spawn(move || {
+        for path in files {
+            let mut f = match std::fs::File::open(&path) {
+                Ok(f) => f,
+                Err(e) => { let _ = tx.send(Chunk::Fail(e.to_string())); continue; }
+            };
+            loop {
+                let mut b = vec![0u8; READ_CHUNK];
+                let mut got = 0;
+                let r = loop {
+                    match f.read(&mut b[got..]) {
+                        Ok(0) => break Ok(()),
+                        Ok(n) => { got += n; if got == b.len() { break Ok(()); } }
+                        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+                        Err(e) => break Err(e),
+                    }
+                };
+                if let Err(e) = r { let _ = tx.send(Chunk::Fail(e.to_string())); break; }
+                b.truncate(got);
+                let last = got < READ_CHUNK;
+                if got > 0 && tx.send(Chunk::Data(b)).is_err() { return; }
+                if last { if tx.send(Chunk::End).is_err() { return; } break; }
+            }
+        }
+    });
+    rx
+}
+
+/// One file's data, as the prefetch thread delivers it.
+struct Prefetched<'a> { rx: &'a Receiver<Chunk>, cur: Vec<u8>, pos: usize, done: bool, p: &'a mut Progress, name: &'a str }
+impl Read for Prefetched<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let n = self.inner.read(buf)?;
         self.p.add(n as u64, self.name);
