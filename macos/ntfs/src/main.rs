@@ -234,6 +234,7 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
     // Reads from the image (on the Mac's disk) overlap the parallel writes to the drive.
     let mut buf = AlignedBuf::new(fastdev::BATCH);
     let mut p = Progress::new(total);
+    let started = Instant::now();
     for (s, e) in rs {
         let mut at = s;
         while at < e {
