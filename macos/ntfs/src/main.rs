@@ -238,9 +238,10 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
     for (s, e) in rs {
         let mut at = s;
         while at < e {
-            let n = ((e - at) as usize).min(BUF);
-            src.read_exact_at(&mut buf[..n], at).map_err(|er| format!("image read error at {at}: {er}"))?;
-            dst.write_all_at(&buf[..n], offset + at).map_err(|er| format!("device write error at {}: {er}", offset + at))?;
+            let n = ((e - at) as usize).min(fastdev::BATCH);
+            buf.set_len(n);
+            src.read_exact_at(buf.as_mut_slice(), at).map_err(|er| format!("image read error at {at}: {er}"))?;
+            dst.write_at(at, buf.as_slice()).map_err(|er| format!("device write error near {}: {er}", offset + at))?;
             at += n as u64;
             p.add(n as u64, "");
         }
