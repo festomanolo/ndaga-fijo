@@ -5,6 +5,9 @@
 //!   ndaga-ntfs stream --image IMG --target DEV --offset N
 //!       Writes only the clusters in use (per $Bitmap), plus the backup boot sector, of a staged NTFS image to DEV.
 //!
+//! Both write through FastDevice (src/fastdev.rs): metadata is cached and written once at the end, file data
+//! goes out in large batches on parallel writer threads, and source files are read ahead on another thread.
+//!
 //! Progress goes to stdout as `P <done> <total> <name>` lines, logs as `L <text>`, errors to stderr.
 //! Licensed under the GNU GPL v3 or later; the vendored driver crates are MIT (see vendor/).
 
