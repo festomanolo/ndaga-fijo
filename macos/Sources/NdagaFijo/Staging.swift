@@ -20,7 +20,12 @@ enum Staging {
     private static func le32(_ b: [UInt8], _ o: Int) -> Int { le16(b, o) | le16(b, o + 2) << 16 }
 
     /// Space needed on the Mac for the staging image: file contents plus FAT overhead.
-    static func hasRoom(for total: UInt64) -> Bool {
+    static func hasRoom(for total: UInt64) -> Bool { hasRoom(for: total, in: "/private/var/tmp") }
+
+    static func hasRoom(for total: UInt64, in dir: String) -> Bool { freeSpace(dir).map { $0 > total + total / 8 + (512 << 20) } ?? false }
+
+    /// Free bytes on a local, writable volume (nil for read-only, network or missing ones).
+    static func freeSpace(_ dir: String) -> UInt64? {
         var st = statfs()
         guard statfs("/private/var/tmp", &st) == 0 else { return false }
         let avail = UInt64(st.f_bavail) * UInt64(st.f_bsize)
