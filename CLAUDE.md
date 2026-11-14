@@ -34,3 +34,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 - Direct (no room, or `NDAGA_NO_STAGING=1`): `copy` writes straight to the raw `/dev/rdiskN` node.
 - FastDevice: small or unaligned writes (driver metadata) go to a RAM write-back cache flushed once at the end,
   sorted and merged; aligned writes of 64 KB or more are coalesced into 8 MB batches on parallel writer threads
+  (`NDAGA_NTFS_WRITERS`, default 4); a prefetch thread reads source files ahead. All device I/O is 4 KB-aligned.
+  Never send small metadata writes to the device interleaved with data: that is what made USB flash crawl
+  (5.6 GB Windows 11 ISO took 30+ minutes before this layer).
