@@ -135,7 +135,18 @@ fn prefetch(files: Vec<PathBuf>, depth: usize) -> Receiver<Chunk> {
 struct Prefetched<'a> { rx: &'a Receiver<Chunk>, cur: Vec<u8>, pos: usize, done: bool, p: &'a mut Progress, name: &'a str }
 impl Read for Prefetched<'_> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let n = self.inner.read(buf)?;
+        while self.pos == self.cur.len() {
+            if self.done { return Ok(0); }
+            match self.rx.recv() {
+                Ok(Chunk::Data(d)) => { self.cur = d; self.pos = 0; }
+                Ok(Chunk::End) => { self.done = true; return Ok(0); }
+                Ok(Chunk::Fail(e)) => { self.done = true; return Err(std::io::Error::other(e)); }
+                Err(_) => return Err(std::io::Error::other("source reader stopped")),
+            }
+        }
+        let n = buf.len().min(self.cur.len() - self.pos);
+        buf[..n].copy_from_slice(&self.cur[self.pos..self.pos + n]);
+        self.pos += n;
         self.p.add(n as u64, self.name);
         Ok(n)
     }
