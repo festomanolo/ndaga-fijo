@@ -247,8 +247,9 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
             if w > p.done { p.add(w - p.done, ""); }
         }
     }
-    flush(&dst)?;
+    dst.finish()?;
     println!("P {total} {total} done");
+    println!("L Streamed in {:.0}s with {writers} parallel writers ({})", started.elapsed().as_secs_f64(), dst.summary());
     Ok(())
 }
 
