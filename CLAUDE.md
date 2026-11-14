@@ -40,3 +40,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 - Any FastDevice change must keep `fastdev::tests::matches_model` passing and should be checked end to end with ntfs-3g.
 
 ## Conventions
+
+- Swift and Rust sources carry the Rufus-derived GPL v3+ header; keep it on new files.
+- Commits: no Co-authored-by trailers and no mention of AI assistance; attribute to the user only.
