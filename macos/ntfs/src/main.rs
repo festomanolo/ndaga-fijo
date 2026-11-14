@@ -186,9 +186,8 @@ fn copy(o: &HashMap<String, String>) -> Res<()> {
         r.drain().map_err(|e| format!("cannot read {rel}: {e}"))?;
     }
     drop(fs);
-    // Flush whatever the OS still buffers for the target (block device or image file).
-    let f = std::fs::OpenOptions::new().write(true).open(target).map_err(|e| format!("cannot reopen {target}: {e}"))?;
-    flush(&f)?;
+    println!("P {} {} finishing", p.total, p.total);
+    fast.finish()?;
     println!("P {} {} done", p.total, p.total);
     println!("L Copied {} files", tree.files.len());
     Ok(())
