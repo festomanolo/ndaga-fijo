@@ -183,6 +183,7 @@ fn copy(o: &HashMap<String, String>) -> Res<()> {
     for (_, rel, _) in &tree.files {
         let mut r = Prefetched { rx: &rx, cur: Vec::new(), pos: 0, done: false, p: &mut p, name: rel };
         fs.write_file(rel, &mut r, false).map_err(|e| format!("cannot write {rel}: {e}"))?;
+        r.drain().map_err(|e| format!("cannot read {rel}: {e}"))?;
     }
     drop(fs);
     // Flush whatever the OS still buffers for the target (block device or image file).
