@@ -189,7 +189,7 @@ fn copy(o: &HashMap<String, String>) -> Res<()> {
     println!("P {} {} finishing", p.total, p.total);
     fast.finish()?;
     println!("P {} {} done", p.total, p.total);
-    println!("L Copied {} files", tree.files.len());
+    println!("L Copied {} files in {:.0}s ({})", tree.files.len(), started.elapsed().as_secs_f64(), fast.summary());
     Ok(())
 }
 
