@@ -37,3 +37,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
   (`NDAGA_NTFS_WRITERS`, default 4); a prefetch thread reads source files ahead. All device I/O is 4 KB-aligned.
   Never send small metadata writes to the device interleaved with data: that is what made USB flash crawl
   (5.6 GB Windows 11 ISO took 30+ minutes before this layer).
+- Any FastDevice change must keep `fastdev::tests::matches_model` passing and should be checked end to end with ntfs-3g.
+
+## Conventions
