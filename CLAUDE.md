@@ -31,3 +31,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 - Staged (normal): mkntfs formats a sparse image, `ndaga-ntfs copy` fills it, `ndaga-ntfs stream` writes only
   in-use clusters to the drive. The image goes in `/private/var/tmp`, or on the ISO's own volume if that is APFS
   (needed for sparse files) and the system disk lacks room (`Staging.directory(for:near:)`).
+- Direct (no room, or `NDAGA_NO_STAGING=1`): `copy` writes straight to the raw `/dev/rdiskN` node.
+- FastDevice: small or unaligned writes (driver metadata) go to a RAM write-back cache flushed once at the end,
+  sorted and merged; aligned writes of 64 KB or more are coalesced into 8 MB batches on parallel writer threads
