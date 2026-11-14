@@ -243,7 +243,8 @@ fn stream(o: &HashMap<String, String>) -> Res<()> {
             src.read_exact_at(buf.as_mut_slice(), at).map_err(|er| format!("image read error at {at}: {er}"))?;
             dst.write_at(at, buf.as_slice()).map_err(|er| format!("device write error near {}: {er}", offset + at))?;
             at += n as u64;
-            p.add(n as u64, "");
+            let w = dst.written();                     // bytes on the drive, not just queued
+            if w > p.done { p.add(w - p.done, ""); }
         }
     }
     flush(&dst)?;
