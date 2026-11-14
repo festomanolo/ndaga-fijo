@@ -7,3 +7,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
 ## Build and test
 
 - Full app: `cd macos && ./build-app.sh && open build/NdagaFijo.app` (universal Swift binary + NTFS tools, ad-hoc signed).
+- NTFS tools only: `macos/ntfs/build.sh [OUT]` (default `macos/build/tools`); first run downloads ntfs-3g once into `ntfs/.cache`.
+- Rust unit tests: `cd macos/ntfs && cargo test --release` (includes the FastDevice model test).
+- If `swift build` fails with "precompiled file ... was compiled with module cache path .../rufus-master/...",
