@@ -88,7 +88,7 @@ enum NtfsMedia {
             try runTool(["stream", "--image", img, "--target", drive.rawPath, "--offset", String(base)],
                         rep: rep, from: 0.45, to: 0.98, label: "Writing to the drive")
         } else {
-            rep.log(Staging.disabled ? "Staging is off (NDAGA_NO_STAGING), writing to the drive directly (slower)" : "Not enough free space on this Mac to stage the image, writing to the drive directly (slower)")
+            rep.log(Staging.disabled ? "Staging is off (NDAGA_NO_STAGING), writing to the drive directly" : "Not enough free space on this Mac to stage the image, writing to the drive directly")
             try runTool(["stream", "--image", img, "--target", drive.rawPath, "--offset", String(base)],
                         rep: rep, from: 0.07, to: 0.08, label: "Writing NTFS metadata")
             try Helper.unmount(drive, rep)
