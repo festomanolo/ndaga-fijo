@@ -16,3 +16,6 @@ Windows Rufus sources (`src/`, `.vs/`, `.mingw/`, autotools files) are upstream 
   `hdiutil attach -nomount -imagekey diskimage-class=CRawDiskImage disk.img` and target `/dev/rdiskN`;
   check results with the ntfs-3g tools (`NTFS3G_TOOLS=1 ntfs/build.sh` keeps `ntfsinfo`/`ntfsls`/`ntfscat`).
 
+## Layout
+
+- `macos/Sources/NdagaFijo/`: `Helper.swift` (root helper: DD and ISO modes, FS auto-pick: FAT32 -> NTFS when a
