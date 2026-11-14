@@ -163,14 +163,11 @@ impl Prefetched<'_> {
 fn copy(o: &HashMap<String, String>) -> Res<()> {
     let target = req(o, "target")?;
     let src = PathBuf::from(req(o, "src")?);
-    let dev: Arc<dyn BlockDevice> = Arc::new(ImageDevice::open_read_write(target).map_err(|e| format!("cannot open {target}: {e}"))?);
-    let dev: Arc<dyn BlockDevice> = match num(o, "offset")? {
-        Some(off) => {
-            let len = num(o, "length")?.ok_or("--offset needs --length")?;
-            Arc::new(PartitionWindow::new(dev, off, len).map_err(|e| e.to_string())?)
-        }
-        None => dev,
-    };
+    let off = num(o, "offset")?.unwrap_or(0);
+    let len = match num(o, "offset")? { Some(_) => Some(num(o, "length")?.ok_or("--offset needs --length")?), None => None };
+    let writers = fastdev::writer_count();
+    let fast = FastDevice::open(target, off, len, writers)?;
+    let dev: Arc<dyn BlockDevice> = fast.clone();
     let fs = NtfsFs::open(dev).map_err(|e| format!("not a usable NTFS volume: {e}"))?;
     if let Some(why) = fs.write_blocked() { return Err(format!("the NTFS volume cannot be written: {why}")); }
 
